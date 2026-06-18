@@ -21,11 +21,12 @@ namespace trace {
         }
 
         int run();
+        std::vector<syscall::CompletedSyscall>& get_completed_syscalls() { return completedSyscalls_; }
 
     private:
         const char* programName_;
         std::vector<char*> programArgs_;
-        std::vector<trace::syscall::CompletedSyscall> completedSyscalls_;
+        std::vector<syscall::CompletedSyscall> completedSyscalls_;
     };
 }
 

@@ -25,7 +25,15 @@ int main(const int argc, char* argv[]) {
         }
 
         trace::Tracer tracer(parseResult.traced);
-        tracer.run();
+        if (tracer.run() != 0)
+        {
+            std::cerr << "tracer.run() error" << std::endl;
+            return 1;
+        }
+        for (auto completedSyscall : tracer.get_completed_syscalls())
+        {
+            std::cout << trace::syscall::print_completed_syscall_line_view(completedSyscall) << "\n";
+        }
     }
     catch (const std::exception& e)
     {

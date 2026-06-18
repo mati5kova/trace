@@ -9,6 +9,7 @@
 #include <string>
 #include <sys/types.h>
 #include <asm/ptrace.h>
+#include <vector>
 
 namespace trace::syscall{
 
@@ -26,20 +27,21 @@ namespace trace::syscall{
         long return_value = 0;
     };
 
-    user_pt_regs get_registers(pid_t pid);
-    static std::string_view syscall_name_from_nr(unsigned long nr);
-}
+    struct SyscallArgInfo {
+        int index = 0;
+        std::string_view name;
+    };
 
-// std::cout
-// << syscall_name_from_nr(syscall_number)
-// << "[" << syscall_number << "]"
-// << " ("
-// << regs.regs[0] << ", "
-// << regs.regs[1] << ", "
-// << regs.regs[2] << ", "
-// << regs.regs[3] << ", "
-// << regs.regs[4] << ", "
-// << regs.regs[5]
-// << ")";
+    struct SyscallInfo {
+        unsigned long nr = 0;
+        std::string_view name;
+        std::vector<SyscallArgInfo> args;
+    };
+
+    user_pt_regs get_registers(pid_t pid);
+    SyscallInfo get_syscall_info_from_nr(unsigned long nr);
+    std::string print_completed_syscall_line_view(const CompletedSyscall& syscall);
+    std::string syscall_line_view_args(const CompletedSyscall& syscall);
+}
 
 #endif //TRACE_SYSCALL_HPP

@@ -58,13 +58,14 @@ int trace::Tracer::run() {
         return 1;
     }
 
-    // Makes syscall-stops distinguishable as SIGTRAP | 0x80.
+    // naredi da so syscall-stops razlocljivi kot SIGTRAP | 0x80
     if (ptrace(PTRACE_SETOPTIONS, pid, nullptr, PTRACE_O_TRACESYSGOOD) == -1) {
         std::perror("ptrace(PTRACE_SETOPTIONS)");
         return 1;
     }
 
     bool enteringSyscall = true;
+    std::optional<syscall::SyscallEntry> currentSyscall;
 
     while (true)
     {
@@ -104,19 +105,20 @@ int trace::Tracer::run() {
 
         const int signal = WSTOPSIG(status);
 
-        if (signal != (SIGTRAP | 0x80))
-        {
+        if (signal == SIGTRAP) {
+            continue;
+        }
+
+        if (signal != (SIGTRAP | 0x80)) {
             std::cout << "child stopped by signal " << signal << '\n';
             continue;
         }
 
-        std::optional<trace::syscall::SyscallEntry> currentSyscall;
-
         if (enteringSyscall) {
             enteringSyscall = false;
 
-            auto regs = trace::syscall::get_registers(pid);
-            currentSyscall = trace::syscall::SyscallEntry{
+            const auto regs = syscall::get_registers(pid);
+            currentSyscall = syscall::SyscallEntry{
                 .pid = pid,
                 .nr = regs.regs[8],
                 .registers = regs
@@ -129,9 +131,9 @@ int trace::Tracer::run() {
                 return 1;
             }
 
-            auto exit_regs = trace::syscall::get_registers(pid);
+            const auto exit_regs = syscall::get_registers(pid);
 
-            trace::syscall::CompletedSyscall completed{
+            syscall::CompletedSyscall completed{
                 .pid = pid,
                 .nr = currentSyscall->nr,
                 .entry_registers = currentSyscall->registers,
