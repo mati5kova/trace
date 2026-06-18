@@ -5,28 +5,27 @@
 #ifndef TRACE_TRACER_HPP
 #define TRACE_TRACER_HPP
 
-#include <string>
-#include <utility>
+#include "trace/options.hpp"
+#include "trace/syscall.hpp"
 
-#include "options.hpp"
+#include <vector>
 
-#include <string_view>
-
-namespace tracer{
+namespace trace {
 
     class Tracer {
     public:
-        explicit Tracer(const trace::options::TracedProgram& tracedProgram) {
-            programName = tracedProgram.programName;
-            programArgs = tracedProgram.programArguments;
+        explicit Tracer(const trace::options::TracedProgram& tracedProgram)
+            : programName_{tracedProgram.programName},
+              programArgs_{tracedProgram.programArguments} {
+
         }
 
         int run();
 
     private:
-        const char* programName;
-        std::vector<char*> programArgs;
-        std::string_view syscall_name_from_nr(unsigned long nr); // NR - number/numeric reference
+        const char* programName_;
+        std::vector<char*> programArgs_;
+        std::vector<trace::syscall::CompletedSyscall> completedSyscalls_;
     };
 }
 

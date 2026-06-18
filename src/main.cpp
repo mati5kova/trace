@@ -24,7 +24,7 @@ int main(const int argc, char* argv[]) {
             return 1;
         }
 
-        tracer::Tracer tracer(parseResult.traced);
+        trace::Tracer tracer(parseResult.traced);
         tracer.run();
     }
     catch (const std::exception& e)

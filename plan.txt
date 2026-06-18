@@ -1,0 +1,5 @@
+dodaj:
+syscall_table.cpp/hpp
+syscall filter
+decode negative return vals
+process_vm_readv -> write access buffer
