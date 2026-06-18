@@ -10,6 +10,8 @@
 
 #include "options.hpp"
 
+#include <string_view>
+
 namespace tracer{
 
     class Tracer {
@@ -24,6 +26,7 @@ namespace tracer{
     private:
         const char* programName;
         std::vector<char*> programArgs;
+        std::string_view syscall_name_from_nr(unsigned long nr); // NR - number/numeric reference
     };
 }
 
