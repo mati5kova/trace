@@ -7,6 +7,7 @@ add_executable(trace
         src/tracer.cpp
         src/options.cpp
         src/syscall.cpp
+        src/utils.cpp
         #        src/process.cpp
 #        src/syscall_table.cpp
 #        src/decoder.cpp

@@ -138,8 +138,10 @@ int trace::Tracer::run() {
                 .nr = currentSyscall->nr,
                 .entry_registers = currentSyscall->registers,
                 .exit_registers = exit_regs,
-                .return_value = static_cast<long>(exit_regs.regs[0]),
+                .return_value = static_cast<long>(exit_regs.regs[0])
             };
+
+            syscall::enrich_completed_syscall(completed);
 
             completedSyscalls_.push_back(completed);
 

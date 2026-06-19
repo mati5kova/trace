@@ -3,18 +3,20 @@
 //
 
 #include "trace/syscall.hpp"
+#include "trace/utils.h"
 
 #include <string_view>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
-#include <iostream>
+#include <regex>
 #include <stdexcept>
 #include <asm/ptrace.h>
 #include <linux/elf.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <vector>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     user_pt_regs regs{};
@@ -33,6 +35,47 @@ user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     return regs;
 }
 
+void trace::syscall::enrich_syscall_write(CompletedSyscall& syscall) {
+    const unsigned long long addr = syscall.entry_registers.regs[1];
+    const unsigned long long numOfBytes = syscall.entry_registers.regs[2];
+    std::string buffer;
+    buffer.reserve(numOfBytes);
+
+    for (unsigned long long offset = 0; offset < numOfBytes; offset += sizeof(long))
+    {
+        errno = 0;
+        long word = ptrace(PTRACE_PEEKDATA, syscall.pid, reinterpret_cast<void*>(addr + offset), nullptr);
+        if (word == -1 && errno != 0)
+        {
+            std::perror("ptrace(PTRACE_PEEKDATA)");
+            break;
+        }
+
+        const char* chars = reinterpret_cast<char*>(&word);
+
+        const unsigned long long bytesLeft = numOfBytes - offset;
+        const unsigned long long bytesToPrint = std::min<unsigned long long>(sizeof(long), bytesLeft);
+
+        for (unsigned long long j = 0; j < bytesToPrint; ++j)
+        {
+            buffer += chars[j];
+        }
+    }
+
+    utils::replace_escape_characters_with_printable(buffer);
+
+    syscall.enrichedArguments[1] = buffer;
+}
+
+void trace::syscall::enrich_completed_syscall(CompletedSyscall& syscall) {
+    switch (syscall.nr)
+    {
+    case 64:
+        enrich_syscall_write(syscall); break;
+    default: break;
+    }
+}
+
 
 std::string trace::syscall::print_completed_syscall_line_view(const CompletedSyscall& syscall) {
     std::string sc_line;
@@ -48,9 +91,22 @@ std::string trace::syscall::print_completed_syscall_line_view(const CompletedSys
         if (i != 0) sc_line += ", ";
         sc_line += info.args[i].name;
         sc_line += "=";
-        sc_line += std::to_string(syscall.entry_registers.regs[info.args[i].index]);
+
+        if (!syscall.enrichedArguments[i].empty())
+        {
+            sc_line += syscall.enrichedArguments[i];
+        } else
+        {
+            sc_line += std::to_string(syscall.entry_registers.regs[info.args[i].index]);
+        }
     }
     sc_line += ") ";
+
+    if (!syscall_does_not_return(syscall.nr))
+    {
+        sc_line += "= ";
+        sc_line += std::to_string(syscall.return_value);
+    }
 
     return sc_line;
 }
@@ -2720,4 +2776,8 @@ trace::syscall::SyscallInfo trace::syscall::get_syscall_info_from_nr(const unsig
         }
     };
     }
+}
+
+bool trace::syscall::syscall_does_not_return(const unsigned long nr) {
+    return nr == 93 || nr == 94; // exit, exit_group na AArch64
 }

@@ -24,6 +24,7 @@ namespace trace::syscall{
         unsigned long nr = 0;
         user_pt_regs entry_registers{};
         user_pt_regs exit_registers{};
+        std::string enrichedArguments[6]{}; // x0-x5
         long return_value = 0;
     };
 
@@ -41,7 +42,11 @@ namespace trace::syscall{
     user_pt_regs get_registers(pid_t pid);
     SyscallInfo get_syscall_info_from_nr(unsigned long nr);
     std::string print_completed_syscall_line_view(const CompletedSyscall& syscall);
-    std::string syscall_line_view_args(const CompletedSyscall& syscall);
+    bool syscall_does_not_return(unsigned long nr);
+    // npr. string namesto mem locationa za buffer v write(fd, buf, count)
+    void enrich_completed_syscall(CompletedSyscall& syscall);
+
+    void enrich_syscall_write(CompletedSyscall& syscall);
 }
 
 #endif //TRACE_SYSCALL_HPP
