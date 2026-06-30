@@ -10,16 +10,13 @@
 #include <iostream>
 #include <stdexcept>
 #include <asm/ptrace.h>
-#include <linux/elf.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <optional>
 
 int trace::Tracer::run() {
-
 
     const pid_t pid = fork();
     if (pid < 0)
@@ -123,6 +120,9 @@ int trace::Tracer::run() {
                 .nr = regs.regs[8],
                 .registers = regs
             };
+
+            syscall::enrich_syscall_entry(currentSyscall);
+
         } else {
             enteringSyscall = true;
 
@@ -133,15 +133,22 @@ int trace::Tracer::run() {
 
             const auto exit_regs = syscall::get_registers(pid);
 
+            std::array<std::string, 6> enrichedArgs{};
+            if (currentSyscall.has_value())
+            {
+                enrichedArgs = currentSyscall.value().enrichedArguments;
+            }
+
             syscall::CompletedSyscall completed{
                 .pid = pid,
                 .nr = currentSyscall->nr,
                 .entry_registers = currentSyscall->registers,
                 .exit_registers = exit_regs,
+                .enrichedArguments = enrichedArgs,
                 .return_value = static_cast<long>(exit_regs.regs[0])
             };
 
-            syscall::enrich_completed_syscall(completed);
+            syscall::enrich_syscall_exit(completed);
 
             completedSyscalls_.push_back(completed);
 

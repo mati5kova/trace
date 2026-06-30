@@ -1,5 +1,11 @@
 dodaj:
 syscall_table.cpp/hpp
 syscall filter
-decode negative return vals
-process_vm_readv -> write access buffer
+decode negative return vals                                                                               |
+
+write - on entry: buf
+read - on entry: readlinkat fd?; on exit: buf
+openat - on entry: pathname
+execve - on entry: pathname, argv[] pointer arr -> strings
+readlinkat - on exit: buf
+getcwd - on exit: buf

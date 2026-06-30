@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <regex>
 #include <stdexcept>
 #include <asm/ptrace.h>
@@ -17,6 +18,8 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <vector>
+#include <unistd.h>
+#include <fcntl.h>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     user_pt_regs regs{};
@@ -35,7 +38,28 @@ user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     return regs;
 }
 
-void trace::syscall::enrich_syscall_write(CompletedSyscall& syscall) {
+void trace::syscall::enrich_syscall_read_entry(SyscallEntry &syscall) {
+    const unsigned long long fd = syscall.registers.regs[0];
+    const std::string path = "/proc/" + std::to_string(syscall.pid) + "/fd/" + std::to_string(fd);
+    std::string linkreadFDLocation(256, '\0');
+
+    const ssize_t n = readlink(path.c_str(), linkreadFDLocation.data(), linkreadFDLocation.size());
+    if (n == -1)
+    {
+        return;
+    }
+
+    if (static_cast<size_t>(n) < linkreadFDLocation.size())
+    {
+        linkreadFDLocation.resize(static_cast<size_t>(n));
+    }
+
+    utils::replace_escape_characters_with_printable(linkreadFDLocation);
+
+    syscall.enrichedArguments[0] = linkreadFDLocation;
+}
+
+void trace::syscall::enrich_syscall_read_exit(CompletedSyscall& syscall) {
     const unsigned long long addr = syscall.entry_registers.regs[1];
     const unsigned long long numOfBytes = syscall.entry_registers.regs[2];
     std::string buffer;
@@ -67,11 +91,55 @@ void trace::syscall::enrich_syscall_write(CompletedSyscall& syscall) {
     syscall.enrichedArguments[1] = buffer;
 }
 
-void trace::syscall::enrich_completed_syscall(CompletedSyscall& syscall) {
+void trace::syscall::enrich_syscall_write_exit(CompletedSyscall& syscall) {
+    const unsigned long long addr = syscall.entry_registers.regs[1];
+    const unsigned long long numOfBytes = syscall.entry_registers.regs[2];
+    std::string buffer;
+    buffer.reserve(numOfBytes);
+
+    for (unsigned long long offset = 0; offset < numOfBytes; offset += sizeof(long))
+    {
+        errno = 0;
+        long word = ptrace(PTRACE_PEEKDATA, syscall.pid, reinterpret_cast<void*>(addr + offset), nullptr);
+        if (word == -1 && errno != 0)
+        {
+            std::perror("ptrace(PTRACE_PEEKDATA)");
+            break;
+        }
+
+        const char* chars = reinterpret_cast<char*>(&word);
+
+        const unsigned long long bytesLeft = numOfBytes - offset;
+        const unsigned long long bytesToPrint = std::min<unsigned long long>(sizeof(long), bytesLeft);
+
+        for (unsigned long long j = 0; j < bytesToPrint; ++j)
+        {
+            buffer += chars[j];
+        }
+    }
+
+    utils::replace_escape_characters_with_printable(buffer);
+
+    syscall.enrichedArguments[1] = buffer;
+}
+
+void trace::syscall::enrich_syscall_entry(std::optional<SyscallEntry>& syscall) {
+    if (!syscall.has_value()) return;
+
+    switch (syscall.value().nr)
+    {
+    case 63: enrich_syscall_read_entry(syscall.value()); break;
+    default: break;
+    }
+}
+
+void trace::syscall::enrich_syscall_exit(CompletedSyscall& syscall) {
     switch (syscall.nr)
     {
+    case 63:
+        enrich_syscall_read_exit(syscall); break;
     case 64:
-        enrich_syscall_write(syscall); break;
+        enrich_syscall_write_exit(syscall); break;
     default: break;
     }
 }
