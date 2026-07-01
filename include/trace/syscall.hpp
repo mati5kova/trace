@@ -39,14 +39,23 @@ namespace trace::syscall{
     // npr. string namesto mem locationa za buffer v write(fd, buf, count)
     void enrich_syscall_exit(CompletedSyscall& syscall);
 
-    std::optional<std::string> helper_get_fd_arg0(const SyscallEntry &syscall);
-    std::optional<std::string> helper_get_fd_arg0(const CompletedSyscall& syscall);
-    std::optional<std::string> helper_get_numbytes_from_buffer(const CompletedSyscall &syscall, const user_pt_regs &regs, int addrLocation, long numOfBytes);
+    std::optional<std::string> helper_get_fd_arg0(const SyscallEntry &syscall, int position);
+    std::optional<std::string> helper_get_fd_arg0(const CompletedSyscall &syscall, int position);
+    std::optional<std::string> helper_get_numbytes_from_buffer(const CompletedSyscall &syscall, const user_pt_regs &regs, int position, long numOfBytes);
+    std::optional<std::string> helper_get_c_string(pid_t pid, unsigned long long addr, std::size_t max_len);
+    std::optional<unsigned long long> helper_get_pointer( pid_t pid, unsigned long long addr);
+    std::optional<std::string> helper_get_string_array(pid_t pid, unsigned long long addr, std::size_t max_items, std::size_t max_string_len);
+    std::optional<std::string> helper_get_dfd(const SyscallEntry &syscall, int position);
+    std::optional<std::string> helper_get_dfd(const CompletedSyscall &syscall, int position);
 
+    void enrich_syscall_getcwd_exit(CompletedSyscall &syscall);
+    void enrich_syscall_openat_entry(SyscallEntry &syscall);
     void enrich_syscall_close_entry(SyscallEntry &syscall);
     void enrich_syscall_read_entry(SyscallEntry& syscall);
     void enrich_syscall_read_exit(CompletedSyscall& syscall);
     void enrich_syscall_write_exit(CompletedSyscall& syscall);
+    void enrich_syscall_execve_entry(SyscallEntry &syscall);
+    void enrich_syscall_readlinkat_exit(CompletedSyscall &syscall);
 }
 
 #endif //TRACE_SYSCALL_HPP
