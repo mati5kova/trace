@@ -2,7 +2,7 @@
 // Created by matevz on 6/19/26.
 //
 
-#include "trace/utils.h"
+#include "trace/utils.hpp"
 
 #include <regex>
 

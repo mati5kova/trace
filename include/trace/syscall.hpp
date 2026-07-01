@@ -31,19 +31,7 @@ namespace trace::syscall{
         long return_value = 0;
     };
 
-    struct SyscallArgInfo {
-        int index = 0;
-        std::string_view name;
-    };
-
-    struct SyscallInfo {
-        unsigned long nr = 0;
-        std::string_view name;
-        std::vector<SyscallArgInfo> args;
-    };
-
     user_pt_regs get_registers(pid_t pid);
-    SyscallInfo get_syscall_info_from_nr(unsigned long nr);
     std::string print_completed_syscall_line_view(const CompletedSyscall& syscall);
     bool syscall_does_not_return(unsigned long nr);
     // npr. linkread(fd) pri read
@@ -51,6 +39,11 @@ namespace trace::syscall{
     // npr. string namesto mem locationa za buffer v write(fd, buf, count)
     void enrich_syscall_exit(CompletedSyscall& syscall);
 
+    std::optional<std::string> helper_get_fd_arg0(const SyscallEntry &syscall);
+    std::optional<std::string> helper_get_fd_arg0(const CompletedSyscall& syscall);
+    std::optional<std::string> helper_get_numbytes_from_buffer(const CompletedSyscall &syscall, const user_pt_regs &regs, int addrLocation, long numOfBytes);
+
+    void enrich_syscall_close_entry(SyscallEntry &syscall);
     void enrich_syscall_read_entry(SyscallEntry& syscall);
     void enrich_syscall_read_exit(CompletedSyscall& syscall);
     void enrich_syscall_write_exit(CompletedSyscall& syscall);

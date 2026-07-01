@@ -24,7 +24,6 @@ int trace::Tracer::run() {
         throw std::runtime_error("failed to fork");
     }
 
-
     if (pid == 0)
     {
         errno = 0;

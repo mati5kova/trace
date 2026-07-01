@@ -8,8 +8,8 @@ add_executable(trace
         src/options.cpp
         src/syscall.cpp
         src/utils.cpp
+        src/syscall_table.cpp
         #        src/process.cpp
-#        src/syscall_table.cpp
 #        src/decoder.cpp
 #        src/child_memory.cpp
 #        src/formatter.cpp
