@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <optional>
+#include <unordered_map>
 
 int trace::Tracer::run() {
 

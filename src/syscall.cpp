@@ -37,8 +37,8 @@ user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     return regs;
 }
 
-std::optional<std::string> trace::syscall::helper_get_fd_arg0(const SyscallEntry &syscall, int position) {
-    const unsigned long long fd = syscall.registers.regs[0];
+std::optional<std::string> trace::syscall::helper_get_fd_arg0(const SyscallEntry &syscall, const int position) {
+    const unsigned long long fd = syscall.registers.regs[position];
     const std::string path = "/proc/" + std::to_string(syscall.pid) + "/fd/" + std::to_string(fd);
     std::string linkreadFDLocation(256, '\0');
 
@@ -58,8 +58,8 @@ std::optional<std::string> trace::syscall::helper_get_fd_arg0(const SyscallEntry
     return linkreadFDLocation;
 }
 
-std::optional<std::string> trace::syscall::helper_get_fd_arg0(const CompletedSyscall &syscall, int position) {
-    const unsigned long long fd = syscall.exit_registers.regs[0];
+std::optional<std::string> trace::syscall::helper_get_fd_arg0(const CompletedSyscall &syscall, const int position) {
+    const unsigned long long fd = syscall.exit_registers.regs[position];
     const std::string path = "/proc/" + std::to_string(syscall.pid) + "/fd/" + std::to_string(fd);
     std::string linkreadFDLocation(256, '\0');
 
