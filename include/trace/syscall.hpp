@@ -6,11 +6,9 @@
 #define TRACE_SYSCALL_HPP
 
 #include <array>
-#include <string_view>
 #include <string>
 #include <sys/types.h>
 #include <asm/ptrace.h>
-#include <vector>
 #include <optional>
 
 namespace trace::syscall{

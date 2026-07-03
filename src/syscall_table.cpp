@@ -2656,6 +2656,16 @@ trace::syscall_table::SyscallInfo trace::syscall_table::get_syscall_info_from_nr
 			{4, "struct statx *buffer"},
 		}
 	};
+    case 293: return {
+        .nr = 293,
+        .name = "rseq",
+        .args = {
+            {0, "struct rseq *rseq"},
+            {1, "uint32_t rseq_len"},
+            {2, "int flags"},
+            {3, "uint32_t sig"}
+        }
+    };
     default: return {
         .nr = 0,
         .name = "UNKNOWN",
