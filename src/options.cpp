@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <iterator>
 
 trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) {
     ParseResult result;
@@ -33,7 +34,21 @@ trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) 
         {
             result.status = ParseStatus::HelpRequested;
             return result;
-        } else if (arg == "--" || arg.starts_with("./"))
+        }
+
+        if (arg == "-f" || arg == "--filter")
+        {
+            if (i + 1 >= argc)
+            {
+                result.status = ParseStatus::ErrorUnknownOption;
+                return result;
+            }
+            result.filterList = parse_filter_list(argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        if (arg == "--" || arg.starts_with("./"))
         {
             if (i + 1 >= argc)
             {
@@ -42,12 +57,12 @@ trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) 
             }
             result.traced.programName = argv[i + 1];
             foundInputProgram = true;
-        } else
-        {
-            result.error_arg_index = i;
-            result.status = ParseStatus::ErrorUnknownOption;
-            return result;
+            continue;
         }
+
+        result.error_arg_index = i;
+        result.status = ParseStatus::ErrorUnknownOption;
+        return result;
     }
 
     result.traced.programArguments.push_back(nullptr);//null terminated za execve
@@ -61,18 +76,21 @@ trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) 
     return result;
 }
 
-void trace::options::print_help(std::string_view executableName) {
+void trace::options::print_help(const std::string_view executableName) {
     std::cout
     << "Usage:\n"
     << "  " << executableName << " [options] -- program [args...]\n"
-    << "  " << executableName << " [options] program [args...]\n"
+    << "  " << executableName << " [options]  ./program [args...]\n"
     << "\n"
     << "Options:\n"
-    << "  -h, --help        Show this help message"
+    << "  -h, --help              Show this help message\n"
+    << "  -f, --filter LIST       Trace only selected syscalls\n"
+    << "                          LIST is a comma-seperated list of syscall names or numbers\n"
+    << "                          Example: --filter write,63,221,clone\n"
     << std::endl;
 }
 
-void trace::options::print_error(const ParseResult& result, int argc, char* argv[]) {
+void trace::options::print_error(const ParseResult& result, const int argc, char* argv[]) {
     switch (result.status)
     {
     case ParseStatus::Ok:
@@ -127,4 +145,25 @@ void trace::options::print_unknown_option(const ParseResult& result, const int a
         std::cerr << "^";
     }
     std::cerr << std::endl;
+}
+
+std::vector<std::string> trace::options::parse_filter_list(const std::string& filterList) {
+    std::vector<std::string> separatedFilterList{};
+    std::string curr;
+    for (const auto ch : filterList)
+    {
+        if (ch == ',')
+        {
+            separatedFilterList.push_back(curr);
+            curr.clear();
+            continue;
+        }
+        curr.push_back(ch);
+    }
+    if (!curr.empty())
+    {
+        separatedFilterList.push_back(curr);
+    }
+
+    return separatedFilterList;
 }

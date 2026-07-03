@@ -26,6 +26,7 @@ namespace trace::options {
     struct ParseResult {
         ParseStatus   status = ParseStatus::Ok;
         TracedProgram traced;
+        std::vector<std::string> filterList{};
         int           error_arg_index = 0;
     };
 
@@ -33,6 +34,7 @@ namespace trace::options {
     void print_help(std::string_view executableName);
     void print_error(const ParseResult& result, int argc, char* argv[]);
     void print_unknown_option(const ParseResult& result, int argc, char* argv[]);
+    std::vector<std::string> parse_filter_list(const std::string &filterList);
 
 }
 

@@ -407,5 +407,5 @@ std::string trace::syscall::print_completed_syscall_line_view(const CompletedSys
 }
 
 bool trace::syscall::syscall_does_not_return(const unsigned long nr) {
-    return nr == 93 || nr == 94; // exit, exit_group na AArch64
+    return nr == __NR_exit || nr == __NR_exit_group;
 }
