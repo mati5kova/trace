@@ -86,7 +86,7 @@ int trace::Tracer::run() {
     while (!tracedProcesses.empty())
     {
         wstatus = 0;
-        pid_t pidOfChanged = waitpid(-1, &wstatus, 0);
+        pid_t pidOfChanged = waitpid(-1, &wstatus, __WALL);
         if (pidOfChanged == -1)
         {
             if (errno != EINTR)
@@ -150,18 +150,16 @@ int trace::Tracer::run() {
                     }
                     tracedProcesses.insert({static_cast<pid_t>(newPid), process::ProcessState{}});
 
+                    // resume starsa ki je klical fork/vfork/clone
                     errno = 0;
                     if (ptrace(PTRACE_SYSCALL, pidOfChanged, nullptr, nullptr) == -1 && errno != 0)
                     {
                         std::perror("ptrace(PTRACE_SYSCALL) pidOfChanged");
                         return 1;
                     }
-                    errno = 0;
-                    if (ptrace(PTRACE_SYSCALL, newPid, nullptr, nullptr) == -1 && errno != 0)
-                    {
-                        std::perror("ptrace(PTRACE_SYSCALL) newPid");
-                        return 1;
-                    }
+
+                    // newPid bo handlan kasneje ko javi svoj stop (prej je bil race condition tukaj)
+
                     continue;
                 }
 
