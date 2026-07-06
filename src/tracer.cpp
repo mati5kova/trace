@@ -192,12 +192,20 @@ int trace::Tracer::run() {
                 // process se bo koncal - resume
                 if (event == PTRACE_EVENT_EXIT)
                 {
+                    auto process = tracedProcesses.find(pidOfChanged);
+                    if (process != tracedProcesses.end())
+                    {
+                        process->second.currentSyscall.reset();
+                        process->second.enteringSyscall = true;
+                    }
+
                     errno = 0;
                     if (ptrace(PTRACE_SYSCALL, pidOfChanged, nullptr, nullptr) == -1 && errno != 0)
                     {
-                        std::perror("ptrace(PTRACE_SYSCALL) pidOfChanged PTRACE_EVENT_EXET");
+                        std::perror("ptrace(PTRACE_SYSCALL) pidOfChanged PTRACE_EVENT_EXIT");
                         return 1;
                     }
+
                     // naslednjic za ta pid dobimo WIFEXITED ali WIFSIGNALED
                     continue;
                 }
@@ -237,6 +245,26 @@ int trace::Tracer::run() {
                     };
 
                     syscall::enrich_syscall_entry(currentSyscall);
+
+                    // za exit in exit_group
+                    if (currentSyscall.has_value())
+                    {
+                        if (syscall::syscall_does_not_return(currentSyscall.value().nr))
+                        {
+                            syscall::CompletedSyscall completed{
+                                .pid = pidOfChanged,
+                                .nr = currentSyscall->nr,
+                                .entry_registers = currentSyscall->registers,
+                                .exit_registers = currentSyscall.value().registers,
+                                .enrichedArguments = currentSyscall.value().enrichedArguments,
+                                .return_value = -1
+                            };
+
+                            completedSyscalls_.push_back(completed);
+                            currentSyscall.reset();
+                            enteringSyscall = true;
+                        }
+                    }
                 } else
                 {
                     auto&[enteringSyscall, currentSyscall] = process->second;

@@ -18,6 +18,7 @@
 #include <vector>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/syscall.h>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     user_pt_regs regs{};

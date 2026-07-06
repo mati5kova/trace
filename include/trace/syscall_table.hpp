@@ -7,8 +7,6 @@
 
 #include <string_view>
 #include <vector>
-#include <string>
-#include <asm/unistd_64.h>
 
 namespace trace::syscall_table{
     struct SyscallArgInfo {
