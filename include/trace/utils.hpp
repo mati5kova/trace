@@ -8,7 +8,7 @@
 #include <string>
 
 namespace trace::utils{
-    void replace_escape_characters_with_printable(std::string& str);
+    void replace_escape_characters_with_printable(std::string &str);
 }
 
 #endif //TRACE_UTILS_H

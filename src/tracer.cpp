@@ -19,7 +19,6 @@
 #include <unordered_map>
 
 int trace::Tracer::run() {
-
     std::unordered_map<pid_t, process::ProcessState> tracedProcesses;
 
     // prvi otrok
@@ -48,22 +47,25 @@ int trace::Tracer::run() {
     int wstatus = 0;
 
     // cakamo na SIGSTOP od otroka
-    if (waitpid(pid, &wstatus, 0) == -1) {
+    if (waitpid(pid, &wstatus, 0) == -1)
+    {
         std::perror("waitpid");
         return 1;
     }
 
-    if (!WIFSTOPPED(wstatus)) {
+    if (!WIFSTOPPED(wstatus))
+    {
         std::cerr << "child did not stop as expected\n";
         return 1;
     }
 
     // naredi da so syscall-stops razlocljivi kot SIGTRAP | 0x80
     if (ptrace(
-        PTRACE_SETOPTIONS,
-        pid,
-        nullptr,
-        PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEEXIT
+            PTRACE_SETOPTIONS,
+            pid,
+            nullptr,
+            PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC
+            | PTRACE_O_TRACEEXIT
         ) == -1)
     {
         std::perror("ptrace(PTRACE_SETOPTIONS)");
@@ -105,7 +107,8 @@ int trace::Tracer::run() {
                 std::cerr << "tried to erase untracked pid";
                 return 1;
             }
-            std::cout << std::to_string(pidOfChanged) + " terminated normally with status " + std::to_string(WEXITSTATUS(wstatus)) << "\n";
+            std::cout << std::to_string(pidOfChanged) + " terminated normally with status " + std::to_string(
+                WEXITSTATUS(wstatus)) << "\n";
             continue;
         }
 
@@ -117,7 +120,8 @@ int trace::Tracer::run() {
                 std::cerr << "tried to erase untracked pid";
                 return 1;
             }
-            std::cout << std::to_string(pidOfChanged) + " terminated by signal " + std::to_string(WTERMSIG(wstatus)) << "\n";
+            std::cout << std::to_string(pidOfChanged) + " terminated by signal " + std::to_string(WTERMSIG(wstatus)) <<
+                    "\n";
             continue;
         }
 
@@ -142,7 +146,7 @@ int trace::Tracer::run() {
                         std::perror("ptrace(PTRACE_GETEVENTMSG)");
                         return 1;
                     }
-                    auto newPid = static_cast<pid_t>(eventMsg);
+                    const auto newPid = static_cast<pid_t>(eventMsg);
                     if (tracedProcesses.contains(static_cast<pid_t>(newPid)))
                     {
                         std::cerr << "newPid already exists in tracked processes\n";
@@ -172,7 +176,7 @@ int trace::Tracer::run() {
                         std::cerr << "tried to access untracked process\n";
                         return 1;
                     }
-                    auto&[enteringSyscall, currentSyscall] = process->second;
+                    auto &[enteringSyscall, currentSyscall] = process->second;
 
                     // nepricakovan, poglej malo zakaj se to lahko zgodi, ne smes slepo resetirat
                     if (enteringSyscall)
@@ -234,7 +238,7 @@ int trace::Tracer::run() {
 
                 if (process->second.enteringSyscall)
                 {
-                    auto&[enteringSyscall, currentSyscall] = process->second;
+                    auto &[enteringSyscall, currentSyscall] = process->second;
                     enteringSyscall = false;
 
                     const auto regs = syscall::get_registers(pidOfChanged);
@@ -261,14 +265,19 @@ int trace::Tracer::run() {
                             };
 
                             completedSyscalls_.push_back(completed);
+
                             currentSyscall.reset();
                             enteringSyscall = true;
+
+                            // print
+                            syscall::handle_syscall_info_print(parseResult_, completedSyscalls_.back());
                         }
                     }
                 } else
                 {
-                    auto&[enteringSyscall, currentSyscall] = process->second;
-                    if (!currentSyscall.has_value()) {
+                    auto &[enteringSyscall, currentSyscall] = process->second;
+                    if (!currentSyscall.has_value())
+                    {
                         std::cerr << "internal error: syscall exit without entry\n";
                         return 1;
                     }
@@ -296,6 +305,9 @@ int trace::Tracer::run() {
 
                     currentSyscall.reset();
                     enteringSyscall = true;
+
+                    // print
+                    syscall::handle_syscall_info_print(parseResult_, completedSyscalls_.back());
                 }
 
                 errno = 0;

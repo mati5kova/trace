@@ -14,19 +14,19 @@ namespace trace {
 
     class Tracer {
     public:
-        explicit Tracer(const trace::options::TracedProgram& tracedProgram)
-            : programName_{tracedProgram.programName},
-              programArgs_{tracedProgram.programArguments} {
-
+        explicit Tracer(const options::ParseResult& parseResult) {
+            programName_ = parseResult.traced.programName;
+            programArgs_ = parseResult.traced.programArguments;
+            parseResult_ = parseResult;
         }
 
         int run();
-        std::vector<syscall::CompletedSyscall>& get_completed_syscalls() { return completedSyscalls_; }
 
     private:
         const char* programName_;
         std::vector<char*> programArgs_;
         std::vector<syscall::CompletedSyscall> completedSyscalls_;
+        options::ParseResult parseResult_;
     };
 }
 

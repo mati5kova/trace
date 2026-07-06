@@ -1,7 +1,7 @@
 dodaj:
 syscall_table.cpp/hpp
 syscall filter
-decode negative return vals                                                                               |
+decode negative return vals
 
 write - on entry: buf
 read - on entry: readlinkat fd?; on exit: buf

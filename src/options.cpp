@@ -8,8 +8,9 @@
 #include <string>
 #include <string_view>
 #include <iterator>
+#include <unordered_set>
 
-trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) {
+trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) {
     ParseResult result;
 
     if (argc < 2)
@@ -43,6 +44,7 @@ trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) 
                 result.status = ParseStatus::ErrorUnknownOption;
                 return result;
             }
+            result.isFiltered = true;
             result.filterList = parse_filter_list(argv[i + 1]);
             i++;
             continue;
@@ -65,7 +67,7 @@ trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) 
         return result;
     }
 
-    result.traced.programArguments.push_back(nullptr);//null terminated za execve
+    result.traced.programArguments.push_back(nullptr); //null terminated za execve
 
     if (!foundInputProgram)
     {
@@ -78,19 +80,19 @@ trace::options::ParseResult trace::options::parse(const int argc, char* argv[]) 
 
 void trace::options::print_help(const std::string_view executableName) {
     std::cout
-    << "Usage:\n"
-    << "  " << executableName << " [options] -- program [args...]\n"
-    << "  " << executableName << " [options]  ./program [args...]\n"
-    << "\n"
-    << "Options:\n"
-    << "  -h, --help              Show this help message\n"
-    << "  -f, --filter LIST       Trace only selected syscalls\n"
-    << "                          LIST is a comma-seperated list of syscall names or numbers\n"
-    << "                          Example: --filter write,63,221,clone\n"
-    << std::endl;
+            << "Usage:\n"
+            << "  " << executableName << " [options] -- program [args...]\n"
+            << "  " << executableName << " [options]  ./program [args...]\n"
+            << "\n"
+            << "Options:\n"
+            << "  -h, --help              Show this help message\n"
+            << "  -f, --filter LIST       Trace only selected syscalls\n"
+            << "                          LIST is a comma-seperated list of syscall names or numbers\n"
+            << "                          Example: --filter write,63,221,clone\n"
+            << std::endl;
 }
 
-void trace::options::print_error(const ParseResult& result, const int argc, char* argv[]) {
+void trace::options::print_error(const ParseResult &result, const int argc, char *argv[]) {
     switch (result.status)
     {
     case ParseStatus::Ok:
@@ -114,10 +116,10 @@ void trace::options::print_error(const ParseResult& result, const int argc, char
     }
 }
 
-void trace::options::print_unknown_option(const ParseResult& result, const int argc, char* argv[]) {
+void trace::options::print_unknown_option(const ParseResult &result, const int argc, char *argv[]) {
     std::size_t offset = 2;
     std::cerr << "Unknown argument:\n"
-    << "  "; // 2
+            << "  "; // 2
     for (int i = 0; i < argc; i++)
     {
         const std::string_view arg{argv[i]};
@@ -147,14 +149,14 @@ void trace::options::print_unknown_option(const ParseResult& result, const int a
     std::cerr << std::endl;
 }
 
-std::vector<std::string> trace::options::parse_filter_list(const std::string& filterList) {
-    std::vector<std::string> separatedFilterList{};
+std::unordered_set<std::string> trace::options::parse_filter_list(const std::string &filterList) {
+    std::unordered_set<std::string> separatedFilterList{};
     std::string curr;
-    for (const auto ch : filterList)
+    for (const auto ch: filterList)
     {
         if (ch == ',')
         {
-            separatedFilterList.push_back(curr);
+            separatedFilterList.insert(curr);
             curr.clear();
             continue;
         }
@@ -162,7 +164,7 @@ std::vector<std::string> trace::options::parse_filter_list(const std::string& fi
     }
     if (!curr.empty())
     {
-        separatedFilterList.push_back(curr);
+        separatedFilterList.insert(curr);
     }
 
     return separatedFilterList;

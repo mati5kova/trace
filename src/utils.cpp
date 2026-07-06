@@ -6,7 +6,7 @@
 
 #include <regex>
 
-void trace::utils::replace_escape_characters_with_printable(std::string& str) {
+void trace::utils::replace_escape_characters_with_printable(std::string &str) {
     str = std::regex_replace(str, std::regex("\r"), "\\r");
     str = std::regex_replace(str, std::regex("\n"), "\\n");
     str = std::regex_replace(str, std::regex("\t"), "\\t");

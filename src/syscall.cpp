@@ -19,6 +19,7 @@
 #include <vector>
 #include <unistd.h>
 #include <fcntl.h>
+#include <iostream>
 #include <sys/syscall.h>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
@@ -29,7 +30,7 @@ user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     iov.iov_len = sizeof(regs);
 
     errno = 0;
-    if (ptrace(PTRACE_GETREGSET, pid, reinterpret_cast<void*>(NT_PRSTATUS), &iov) == -1 && errno != 0)
+    if (ptrace(PTRACE_GETREGSET, pid, reinterpret_cast<void *>(NT_PRSTATUS), &iov) == -1 && errno != 0)
     {
         std::perror("ptrace(PTRACE_GETREGSET)");
         throw std::runtime_error("failed to get registers");
@@ -80,8 +81,9 @@ std::optional<std::string> trace::syscall::helper_get_fd_arg0(const CompletedSys
     return linkreadFDLocation;
 }
 
-std::optional<std::string> trace::syscall::helper_get_numbytes_from_buffer(const CompletedSyscall &syscall, const user_pt_regs &regs, const int position, const long numOfBytes) {
-    if (numOfBytes <= 0) return{};
+std::optional<std::string> trace::syscall::helper_get_numbytes_from_buffer(
+    const CompletedSyscall &syscall, const user_pt_regs &regs, const int position, const long numOfBytes) {
+    if (numOfBytes <= 0) return {};
 
     const unsigned long long addr = regs.regs[position];
     std::string buffer;
@@ -90,14 +92,15 @@ std::optional<std::string> trace::syscall::helper_get_numbytes_from_buffer(const
     for (long offset = 0; offset < numOfBytes; offset += sizeof(long))
     {
         errno = 0;
-        long word = ptrace(PTRACE_PEEKDATA, syscall.pid, reinterpret_cast<void*>(addr + static_cast<std::size_t>(offset)), nullptr);
+        long word = ptrace(PTRACE_PEEKDATA, syscall.pid,
+                           reinterpret_cast<void *>(addr + static_cast<std::size_t>(offset)), nullptr);
         if (word == -1 && errno != 0)
         {
             std::perror("ptrace(PTRACE_PEEKDATA)");
             return {};
         }
 
-        const char* chars = reinterpret_cast<char*>(&word);
+        const char *chars = reinterpret_cast<char *>(&word);
 
         const long bytesLeft = numOfBytes - offset;
         const long bytesToPrint = std::min<long>(sizeof(long), bytesLeft);
@@ -113,7 +116,8 @@ std::optional<std::string> trace::syscall::helper_get_numbytes_from_buffer(const
     return buffer;
 }
 
-std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, const unsigned long long addr, const std::size_t max_len) {
+std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, const unsigned long long addr,
+                                                               const std::size_t max_len) {
     if (addr == 0) return std::string("NULL");
 
     std::string result;
@@ -122,7 +126,7 @@ std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, 
     for (std::size_t offset = 0; offset < max_len; offset += sizeof(long))
     {
         errno = 0;
-        long word = ptrace(PTRACE_PEEKDATA, pid, reinterpret_cast<void*>(addr + offset), nullptr);
+        long word = ptrace(PTRACE_PEEKDATA, pid, reinterpret_cast<void *>(addr + offset), nullptr);
 
         if (word == -1 && errno != 0)
         {
@@ -130,7 +134,7 @@ std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, 
             return {};
         }
 
-        auto chars = reinterpret_cast<const char*>(&word);
+        auto chars = reinterpret_cast<const char *>(&word);
 
         for (std::size_t i = 0; i < sizeof(long) && offset + i < max_len; ++i)
         {
@@ -151,7 +155,7 @@ std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, 
 
 std::optional<unsigned long long> trace::syscall::helper_get_pointer(const pid_t pid, const unsigned long long addr) {
     errno = 0;
-    const long word = ptrace(PTRACE_PEEKDATA, pid, reinterpret_cast<void*>(addr), nullptr);
+    const long word = ptrace(PTRACE_PEEKDATA, pid, reinterpret_cast<void *>(addr), nullptr);
 
     if (word == -1 && errno != 0)
     {
@@ -162,7 +166,9 @@ std::optional<unsigned long long> trace::syscall::helper_get_pointer(const pid_t
     return static_cast<unsigned long long>(word);
 }
 
-std::optional<std::string> trace::syscall::helper_get_string_array(const pid_t pid, const unsigned long long addr, const std::size_t max_items, const std::size_t max_string_len) {
+std::optional<std::string> trace::syscall::helper_get_string_array(const pid_t pid, const unsigned long long addr,
+                                                                   const std::size_t max_items,
+                                                                   const std::size_t max_string_len) {
     if (addr == 0) return std::string("NULL");
 
     std::string result = "[";
@@ -193,8 +199,7 @@ std::optional<std::string> trace::syscall::helper_get_string_array(const pid_t p
             result += "\"";
             result += s.value();
             result += "\"";
-        }
-        else
+        } else
         {
             result += "0x";
             char buf[32];
@@ -253,7 +258,7 @@ void trace::syscall::enrich_syscall_read_entry(SyscallEntry &syscall) {
     if (fd.has_value()) syscall.enrichedArguments[0] = fd.value();
 }
 
-void trace::syscall::enrich_syscall_read_exit(CompletedSyscall& syscall) {
+void trace::syscall::enrich_syscall_read_exit(CompletedSyscall &syscall) {
     auto nread = syscall.return_value;
     if (nread <= 0) return;
 
@@ -264,7 +269,7 @@ void trace::syscall::enrich_syscall_read_exit(CompletedSyscall& syscall) {
     syscall.enrichedArguments[1] = buffer.value();
 }
 
-void trace::syscall::enrich_syscall_write_exit(CompletedSyscall& syscall) {
+void trace::syscall::enrich_syscall_write_exit(CompletedSyscall &syscall) {
     auto nread = syscall.return_value;
     if (nread <= 0) return;
 
@@ -341,83 +346,105 @@ void trace::syscall::enrich_syscall_readlinkat_exit(CompletedSyscall &syscall) {
 void trace::syscall::enrich_syscall_getcwd_exit(CompletedSyscall &syscall) {
     if (syscall.return_value <= 0) return;
 
-    const auto buf = helper_get_numbytes_from_buffer(syscall, syscall.entry_registers, 0, syscall.return_value-1);
+    const auto buf = helper_get_numbytes_from_buffer(syscall, syscall.entry_registers, 0, syscall.return_value - 1);
     if (buf.has_value())
     {
         syscall.enrichedArguments[0] = buf.value();
     }
 }
 
-void trace::syscall::enrich_syscall_entry(std::optional<SyscallEntry>& syscall) {
+void trace::syscall::enrich_syscall_entry(std::optional<SyscallEntry> &syscall) {
     if (!syscall.has_value()) return;
 
     switch (syscall.value().nr)
     {
-    case __NR_openat: enrich_syscall_openat_entry(syscall.value()); break;
-    case __NR_close: enrich_syscall_close_entry(syscall.value()); break;
-    case __NR_read: enrich_syscall_read_entry(syscall.value()); break;
-    case __NR_execve: enrich_syscall_execve_entry(syscall.value()); break;
-    case __NR_readlinkat: enrich_syscall_readlinkat_entry(syscall.value()); break;
+    case __NR_openat: enrich_syscall_openat_entry(syscall.value());
+        break;
+    case __NR_close: enrich_syscall_close_entry(syscall.value());
+        break;
+    case __NR_read: enrich_syscall_read_entry(syscall.value());
+        break;
+    case __NR_execve: enrich_syscall_execve_entry(syscall.value());
+        break;
+    case __NR_readlinkat: enrich_syscall_readlinkat_entry(syscall.value());
+        break;
     default: break;
     }
 }
 
-void trace::syscall::enrich_syscall_exit(CompletedSyscall& syscall) {
+void trace::syscall::enrich_syscall_exit(CompletedSyscall &syscall) {
     switch (syscall.nr)
     {
-    case __NR_getcwd: enrich_syscall_getcwd_exit(syscall); break;
-    case __NR_read: enrich_syscall_read_exit(syscall); break;
-    case __NR_write: enrich_syscall_write_exit(syscall); break;
-    case __NR_readlinkat: enrich_syscall_readlinkat_exit(syscall); break;
+    case __NR_getcwd: enrich_syscall_getcwd_exit(syscall);
+        break;
+    case __NR_read: enrich_syscall_read_exit(syscall);
+        break;
+    case __NR_write: enrich_syscall_write_exit(syscall);
+        break;
+    case __NR_readlinkat: enrich_syscall_readlinkat_exit(syscall);
+        break;
     default: break;
     }
 }
 
-
-std::string trace::syscall::print_completed_syscall_line_view(const CompletedSyscall& syscall) {
-    std::string sc_line;
+void trace::syscall::handle_syscall_info_print(const options::ParseResult &parseResult,
+                                               const CompletedSyscall &syscall) {
 
     const syscall_table::SyscallInfo info = syscall_table::get_syscall_info_from_nr(syscall.nr);
 
-    sc_line += info.name;
-    sc_line +=  + "[" + std::to_string(syscall.nr) + "]" + " ";
-    sc_line += "(";
-    for (std::size_t i = 0; i < info.args.size(); i++)
+    if (
+        (
+            parseResult.isFiltered &&
+            (
+                parseResult.filterList.contains(std::to_string(syscall.nr)) ||
+                parseResult.filterList.contains(
+                    info.name.data())
+            ))
+        || !parseResult.isFiltered
+        )
     {
-        if (info.args[i].name == "-") break;
-        if (i != 0) sc_line += ", ";
-        sc_line += info.args[i].name;
-        sc_line += "=";
+        std::string sc_line;
 
-        if (!syscall.enrichedArguments[i].empty())
+        sc_line += info.name;
+        sc_line += +"[" + std::to_string(syscall.nr) + "]" + " ";
+        sc_line += "(";
+        for (std::size_t i = 0; i < info.args.size(); i++)
         {
-            sc_line += syscall.enrichedArguments[i];
-        } else
-        {
-            sc_line += std::to_string(syscall.entry_registers.regs[info.args[i].index]);
+            if (info.args[i].name == "-") break;
+            if (i != 0) sc_line += ", ";
+            sc_line += info.args[i].name;
+            sc_line += "=";
+
+            if (!syscall.enrichedArguments[i].empty())
+            {
+                sc_line += syscall.enrichedArguments[i];
+            } else
+            {
+                sc_line += std::to_string(syscall.entry_registers.regs[info.args[i].index]);
+            }
         }
-    }
-    sc_line += ") ";
+        sc_line += ")";
 
-    if (!syscall_does_not_return(syscall.nr))
-    {
-        sc_line += "= ";
-        sc_line += std::to_string(syscall.return_value);
-
-        if (-4095 < syscall.return_value && syscall.return_value < 0)
+        if (!syscall_does_not_return(syscall.nr))
         {
-            const int errnum = static_cast<int>(-syscall.return_value);
-            sc_line += " ";
-            sc_line += strerrorname_np(errnum);
-            sc_line += " (";
-            sc_line += std::strerror(errnum);
-            sc_line += ")";
+            sc_line += " = ";
+            sc_line += std::to_string(syscall.return_value);
 
+            if (-4095 < syscall.return_value && syscall.return_value < 0)
+            {
+                const int errnum = static_cast<int>(-syscall.return_value);
+                sc_line += " ";
+                sc_line += strerrorname_np(errnum);
+                sc_line += " (";
+                sc_line += std::strerror(errnum);
+                sc_line += ")";
+            }
         }
-    }
 
-    return sc_line;
+        std::cout << sc_line << "\n";
+    }
 }
+
 
 bool trace::syscall::syscall_does_not_return(const unsigned long nr) {
     return nr == __NR_exit || nr == __NR_exit_group;
