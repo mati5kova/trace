@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <regex>
 #include <stdexcept>
 #include <asm/ptrace.h>
@@ -402,6 +403,17 @@ std::string trace::syscall::print_completed_syscall_line_view(const CompletedSys
     {
         sc_line += "= ";
         sc_line += std::to_string(syscall.return_value);
+
+        if (-4095 < syscall.return_value && syscall.return_value < 0)
+        {
+            const int errnum = static_cast<int>(-syscall.return_value);
+            sc_line += " ";
+            sc_line += strerrorname_np(errnum);
+            sc_line += " (";
+            sc_line += std::strerror(errnum);
+            sc_line += ")";
+
+        }
     }
 
     return sc_line;

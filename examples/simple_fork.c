@@ -1,5 +1,4 @@
 // examples/simple_fork.c
-#include <stdio.h>
 #include <unistd.h>
 
 int main() {
