@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <asm/ptrace.h>
 #include <optional>
+#include <chrono>
 
 namespace trace::syscall{
     struct SyscallEntry {
@@ -19,6 +20,7 @@ namespace trace::syscall{
         unsigned long nr = 0;
         user_pt_regs registers{};
         std::array<std::string, 6> enrichedArguments{};
+        std::chrono::time_point<std::chrono::system_clock> highresEntryTimePoint{};
     };
 
     struct CompletedSyscall {
@@ -28,6 +30,8 @@ namespace trace::syscall{
         user_pt_regs exit_registers{};
         std::array<std::string, 6> enrichedArguments{}; // x0-x5
         long return_value = 0;
+        std::chrono::time_point<std::chrono::system_clock> highresEntryTimePoint;
+        std::chrono::time_point<std::chrono::system_clock> highresExitTimePoint;
     };
 
     user_pt_regs get_registers(pid_t pid);

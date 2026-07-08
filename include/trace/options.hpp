@@ -11,6 +11,11 @@
 #include <unordered_set>
 
 namespace trace::options{
+    enum class DurationUnit {
+        US,
+        NS
+    };
+
     enum class ParseStatus {
         Ok,
         HelpRequested,
@@ -19,16 +24,20 @@ namespace trace::options{
     };
 
     struct TracedProgram {
-        const char *programName = "";
-        std::vector<char *> programArguments;
+        const char *programName{""};
+        std::vector<char *> programArguments{};
     };
 
     struct ParseResult {
-        ParseStatus status = ParseStatus::Ok;
-        TracedProgram traced;
+        ParseStatus status{ParseStatus::Ok};
+        TracedProgram traced{};
         std::unordered_set<std::string> filterList{};
-        int error_arg_index = 0;
-        bool isFiltered = false;
+        int error_arg_index{0};
+        bool isFiltered{false};
+        bool showEntryTime{false};
+        bool highPrecisionEntryTime{false};
+        bool showDuration{false};
+        DurationUnit durationUnit{DurationUnit::US};
     };
 
     ParseResult parse(int argc, char *argv[]);

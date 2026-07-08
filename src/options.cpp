@@ -46,7 +46,41 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
             }
             result.isFiltered = true;
             result.filterList = parse_filter_list(argv[i + 1]);
-            i++;
+            ++i;
+            continue;
+        }
+
+        if (arg == "-t" || arg == "--time")
+        {
+            result.showEntryTime = true;
+            continue;
+        }
+
+        if (arg == "-tt" || arg == "--ttime")
+        {
+            result.showEntryTime = true;
+            result.highPrecisionEntryTime = true;
+            continue;
+        }
+
+        if (arg == "-d" || arg == "--duration")
+        {
+            result.showDuration = true;
+            if (i + 1 < argc)
+            {
+                std::string unit = argv[i + 1];
+
+                if (unit == "us")
+                {
+                    result.durationUnit = DurationUnit::US;
+                    ++i;
+                }
+                else if (unit == "ns")
+                {
+                    result.durationUnit = DurationUnit::NS;
+                    ++i;
+                }
+            }
             continue;
         }
 
@@ -85,10 +119,14 @@ void trace::options::print_help(const std::string_view executableName) {
             << "  " << executableName << " [options]  ./program [args...]\n"
             << "\n"
             << "Options:\n"
-            << "  -h, --help              Show this help message\n"
-            << "  -f, --filter LIST       Trace only selected syscalls\n"
-            << "                          LIST is a comma-seperated list of syscall names or numbers\n"
-            << "                          Example: --filter write,63,221,clone\n"
+            << "  -h, --help                      Show this help message\n"
+            << "  -f, --filter LIST               Trace only selected syscalls\n"
+            << "                                  LIST is a comma-seperated list of syscall names or numbers\n"
+            << "                                  Example: --filter write,63,221,clone\n"
+            << "  -t, -tt --time, -ttime          Show syscall entry time (-t wall clock, -tt wall clock high precision)\n"
+            << "  -d, --duration PRECISION        Show syscall duration\n"
+            << "                                  PRECISION is either us (microseconds) or ns (nanoseconds)\n"
+            << "                                  The default value is us"
             << std::endl;
 }
 

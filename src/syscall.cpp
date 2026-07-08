@@ -21,6 +21,9 @@
 #include <fcntl.h>
 #include <iostream>
 #include <sys/syscall.h>
+#include <chrono>
+#include <format>
+#include <iomanip>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     user_pt_regs regs{};
@@ -389,7 +392,6 @@ void trace::syscall::enrich_syscall_exit(CompletedSyscall &syscall) {
 
 void trace::syscall::handle_syscall_info_print(const options::ParseResult &parseResult,
                                                const CompletedSyscall &syscall) {
-
     const syscall_table::SyscallInfo info = syscall_table::get_syscall_info_from_nr(syscall.nr);
 
     if (
@@ -404,6 +406,32 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
         )
     {
         std::string sc_line;
+
+        if (parseResult.showEntryTime)
+        {
+            const auto tp = syscall.highresEntryTimePoint;
+            const std::time_t t = std::chrono::system_clock::to_time_t(tp);
+
+            std::ostringstream oss;
+            oss << std::put_time(std::localtime(&t), "%H:%M:%S");
+
+            if (parseResult.highPrecisionEntryTime)
+            {
+                const auto us_total = std::chrono::duration_cast<std::chrono::microseconds>(
+                    tp.time_since_epoch()
+                ) % 1'000'000;
+
+                const auto ms = us_total.count() / 1000;
+                const auto us = us_total.count() % 1000;
+
+                oss << "."
+                    << std::setfill('0') << std::setw(3) << ms
+                    << "'"
+                    << std::setfill('0') << std::setw(3) << us;
+            }
+
+            sc_line += oss.str() + " ";
+        }
 
         sc_line += info.name;
         sc_line += +"[" + std::to_string(syscall.nr) + "]" + " ";
@@ -439,6 +467,23 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
                 sc_line += std::strerror(errnum);
                 sc_line += ")";
             }
+        }
+
+        if (parseResult.showDuration)
+        {
+            const auto duration = syscall.highresExitTimePoint - syscall.highresEntryTimePoint;
+            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+            const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+
+            sc_line += " <";
+            if (parseResult.durationUnit == options::DurationUnit::US)
+            {
+                sc_line += std::to_string(us.count()) + " us";
+            } else
+            {
+                sc_line += std::to_string(ns.count()) + " ns";
+            }
+            sc_line += ">";
         }
 
         std::cout << sc_line << "\n";

@@ -17,6 +17,8 @@
 #include <unistd.h>
 #include <optional>
 #include <unordered_map>
+#include <chrono>
+#include <format>
 
 int trace::Tracer::run() {
     std::unordered_map<pid_t, process::ProcessState> tracedProcesses;
@@ -245,7 +247,8 @@ int trace::Tracer::run() {
                     currentSyscall = syscall::SyscallEntry{
                         .pid = pidOfChanged,
                         .nr = regs.regs[8],
-                        .registers = regs
+                        .registers = regs,
+                        .highresEntryTimePoint = std::chrono::high_resolution_clock::now(),
                     };
 
                     syscall::enrich_syscall_entry(currentSyscall);
@@ -255,13 +258,16 @@ int trace::Tracer::run() {
                     {
                         if (syscall::syscall_does_not_return(currentSyscall.value().nr))
                         {
+                            const auto exitTimePoint = std::chrono::high_resolution_clock::now();
                             syscall::CompletedSyscall completed{
                                 .pid = pidOfChanged,
                                 .nr = currentSyscall->nr,
                                 .entry_registers = currentSyscall->registers,
                                 .exit_registers = currentSyscall.value().registers,
                                 .enrichedArguments = currentSyscall.value().enrichedArguments,
-                                .return_value = -1
+                                .return_value = -1,
+                                .highresEntryTimePoint = exitTimePoint,
+                                .highresExitTimePoint = exitTimePoint,
                             };
 
                             completedSyscalls_.push_back(completed);
@@ -296,7 +302,9 @@ int trace::Tracer::run() {
                         .entry_registers = currentSyscall->registers,
                         .exit_registers = exit_regs,
                         .enrichedArguments = enrichedArgs,
-                        .return_value = static_cast<long>(exit_regs.regs[0])
+                        .return_value = static_cast<long>(exit_regs.regs[0]),
+                        .highresEntryTimePoint = currentSyscall->highresEntryTimePoint,
+                        .highresExitTimePoint = std::chrono::high_resolution_clock::now(),
                     };
 
                     syscall::enrich_syscall_exit(completed);
