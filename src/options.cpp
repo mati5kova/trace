@@ -84,6 +84,29 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
             continue;
         }
 
+        if (arg.starts_with("--color-mode="))
+        {
+            const auto prefixLen = std::string("--color-mode=").length();
+            const auto argLen = arg.length();
+            const auto sub = arg.substr(prefixLen, argLen);
+
+            using enum formatter::ColorMode;
+            if (sub == "always")
+            {
+                result.colorMode = Always;
+            } else if (sub == "never")
+            {
+                result.colorMode = Never;
+            } else if (sub == "auto")
+            {} else
+            {
+                result.status = ParseStatus::ErrorUnknownOption;
+                result.error_arg_index = i;
+                return result;
+            }
+            continue;
+        }
+
         if (arg == "--" || arg.starts_with("./"))
         {
             if (i + 1 >= argc)
@@ -126,7 +149,9 @@ void trace::options::print_help(const std::string_view executableName) {
             << "  -t, -tt --time, -ttime          Show syscall entry time (-t wall clock, -tt wall clock high precision)\n"
             << "  -d, --duration PRECISION        Show syscall duration\n"
             << "                                  PRECISION is either us (microseconds) or ns (nanoseconds)\n"
-            << "                                  The default value is us"
+            << "                                  The default value is us\n"
+            << "  --color-mode=MODE               MODE is one of auto/always/never\n"
+            << "                                  Default value is auto"
             << std::endl;
 }
 

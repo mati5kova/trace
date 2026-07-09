@@ -5,6 +5,8 @@
 #ifndef TRACE_OPTIONS_HPP
 #define TRACE_OPTIONS_HPP
 
+#include "formatter.hpp"
+
 #include <string>
 #include <vector>
 #include <string_view>
@@ -38,6 +40,7 @@ namespace trace::options{
         bool highPrecisionEntryTime{false};
         bool showDuration{false};
         DurationUnit durationUnit{DurationUnit::US};
+        formatter::ColorMode colorMode{formatter::ColorMode::Auto};
     };
 
     ParseResult parse(int argc, char *argv[]);

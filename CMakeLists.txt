@@ -9,12 +9,6 @@ add_executable(trace
         src/syscall.cpp
         src/utils.cpp
         src/syscall_table.cpp
-
-#        src/process.cpp
-#        src/decoder.cpp
-#        src/child_memory.cpp
-#        src/formatter.cpp
-#        src/cli.cpp
 )
 
 target_include_directories(trace PRIVATE include)
