@@ -5,6 +5,7 @@
 #include "trace/syscall.hpp"
 #include "trace/utils.hpp"
 #include "trace/syscall_table.hpp"
+#include "trace/formatter.hpp"
 
 #include <cerrno>
 #include <csignal>
@@ -390,6 +391,28 @@ void trace::syscall::enrich_syscall_exit(CompletedSyscall &syscall) {
     }
 }
 
+std::string trace::syscall::errno_name_from_return_value(const int errnum) {
+    switch (errnum)
+    {
+    case 512: return "ERESTARTSYS";
+    case 513: return "ERESTARTNOINTR";
+    case 514: return "ERESTARTNOHAND";
+    case 516: return "ERESTART_RESTARTBLOCK";
+    default:
+        if (const char *name = strerrorname_np(errnum)) {
+            return name;
+        }
+        return "ERRNO_" + std::to_string(errnum);
+    }
+}
+
+bool trace::syscall::is_restart_errno(const int errnum) {
+    return errnum == 512 ||
+           errnum == 513 ||
+           errnum == 514 ||
+           errnum == 516;
+}
+
 void trace::syscall::handle_syscall_info_print(const options::ParseResult &parseResult,
                                                const CompletedSyscall &syscall) {
     const syscall_table::SyscallInfo info = syscall_table::get_syscall_info_from_nr(syscall.nr);
@@ -405,6 +428,10 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
         || !parseResult.isFiltered
         )
     {
+        // cf - color formatter
+        formatter::Formatter cf(parseResult.colorMode);
+        using enum formatter::StyleRole;
+
         std::string sc_line;
 
         if (parseResult.showEntryTime)
@@ -430,17 +457,17 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
                     << std::setfill('0') << std::setw(3) << us;
             }
 
-            sc_line += oss.str() + " ";
+            sc_line += cf.apply(Timestamp, oss.str()) + " ";
         }
 
-        sc_line += info.name;
-        sc_line += +"[" + std::to_string(syscall.nr) + "]" + " ";
+        sc_line += cf.apply(SyscallName, info.name);
+        sc_line += +"[" + cf.apply(SyscallNr, std::to_string(syscall.nr)) + "] ";
         sc_line += "(";
         for (std::size_t i = 0; i < info.args.size(); i++)
         {
             if (info.args[i].name == "-") break;
             if (i != 0) sc_line += ", ";
-            sc_line += info.args[i].name;
+            sc_line += cf.apply(ArgName, info.args[i].name); // TODO - loci argname in argtype
             sc_line += "=";
 
             if (!syscall.enrichedArguments[i].empty())
@@ -456,16 +483,20 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
         if (!syscall_does_not_return(syscall.nr))
         {
             sc_line += " = ";
-            sc_line += std::to_string(syscall.return_value);
+            sc_line += cf.apply(syscall.return_value >= 0 ? RetSuccess : RetError, std::to_string(syscall.return_value));
 
             if (-4095 < syscall.return_value && syscall.return_value < 0)
             {
                 const int errnum = static_cast<int>(-syscall.return_value);
                 sc_line += " ";
-                sc_line += strerrorname_np(errnum);
-                sc_line += " (";
-                sc_line += std::strerror(errnum);
-                sc_line += ")";
+                sc_line += cf.apply(RetErrorName, errno_name_from_return_value(errnum));
+
+                if (!is_restart_errno(errnum))
+                {
+                    sc_line += " (";
+                    sc_line += cf.apply(RetErrorStr, std::strerror(errnum));
+                    sc_line += ")";
+                }
             }
         }
 
@@ -475,15 +506,18 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
             const auto us = std::chrono::duration_cast<std::chrono::microseconds>(duration);
             const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
 
-            sc_line += " <";
+            std::string durationStr;
+            durationStr += " <";
             if (parseResult.durationUnit == options::DurationUnit::US)
             {
-                sc_line += std::to_string(us.count()) + " us";
+                durationStr += std::to_string(us.count()) + " us";
             } else
             {
-                sc_line += std::to_string(ns.count()) + " ns";
+                durationStr += std::to_string(ns.count()) + " ns";
             }
-            sc_line += ">";
+            durationStr += ">";
+
+            sc_line += cf.apply(Duration, durationStr);
         }
 
         std::cout << sc_line << "\n";

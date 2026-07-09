@@ -36,6 +36,10 @@ namespace trace::syscall{
 
     user_pt_regs get_registers(pid_t pid);
 
+    std::string errno_name_from_return_value(int errnum);
+
+    bool is_restart_errno(int errnum);
+
     void handle_syscall_info_print(const options::ParseResult &parseResult, const CompletedSyscall &syscall);
 
     bool syscall_does_not_return(unsigned long nr);
