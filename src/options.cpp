@@ -46,6 +46,7 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
             if (i + 1 >= argc)
             {
                 result.status = ParseStatus::ErrorUnknownOption;
+                result.error_arg_index = i;
                 return result;
             }
             result.isFiltered = true;
@@ -129,6 +130,7 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
                 if (!sortByCol.has_value())
                 {
                     result.status = ParseStatus::ErrorUnknownOption;
+                    result.error_arg_index = i;
                     return result;
                 }
 
@@ -138,6 +140,7 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
                 if (it == result.sortByOrder.end())
                 {
                     result.status = ParseStatus::ErrorUnknownOption;
+                    result.error_arg_index = i;
                     return result;
                 }
 
@@ -242,7 +245,7 @@ void trace::options::print_error(const ParseResult &result, const int argc, char
 
 void trace::options::print_unknown_option(const ParseResult &result, const int argc, char *argv[]) {
     std::size_t offset = 2;
-    std::cerr << "Unknown argument:\n"
+    std::cerr << "Unknown argument/option:\n"
             << "  "; // 2
     for (int i = 0; i < argc; i++)
     {
