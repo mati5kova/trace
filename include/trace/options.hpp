@@ -41,6 +41,7 @@ namespace trace::options{
         bool showDuration{false};
         DurationUnit durationUnit{DurationUnit::US};
         formatter::ColorMode colorMode{formatter::ColorMode::Auto};
+        bool showSummary{false};
     };
 
     ParseResult parse(int argc, char *argv[]);

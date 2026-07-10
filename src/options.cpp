@@ -107,6 +107,12 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
             continue;
         }
 
+        if (arg == "-s" || arg == "--summary")
+        {
+            result.showSummary = true;
+            continue;
+        }
+
         if (arg == "--" || arg.starts_with("./"))
         {
             if (i + 1 >= argc)
@@ -151,7 +157,8 @@ void trace::options::print_help(const std::string_view executableName) {
             << "                                  PRECISION is either us (microseconds) or ns (nanoseconds)\n"
             << "                                  The default value is us\n"
             << "  --color-mode=MODE               MODE is one of auto/always/never\n"
-            << "                                  Default value is auto"
+            << "                                  Default value is auto\n"
+            << "  -s, --summary                   Print the summary at the end of program trace"
             << std::endl;
 }
 

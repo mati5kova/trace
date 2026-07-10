@@ -265,7 +265,7 @@ int trace::Tracer::run() {
                                 .entry_registers = currentSyscall->registers,
                                 .exit_registers = currentSyscall.value().registers,
                                 .enrichedArguments = currentSyscall.value().enrichedArguments,
-                                .return_value = -1,
+                                .return_value = 0,
                                 .highresEntryTimePoint = exitTimePoint,
                                 .highresExitTimePoint = exitTimePoint,
                             };
@@ -337,6 +337,8 @@ int trace::Tracer::run() {
             continue;
         }
     }
+
+    syscall::handle_syscall_summary_print(parseResult_, completedSyscalls_);
 
     return 0;
 }

@@ -25,6 +25,8 @@
 #include <chrono>
 #include <format>
 #include <iomanip>
+#include <unordered_map>
+#include <algorithm>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     user_pt_regs regs{};
@@ -399,7 +401,8 @@ std::string trace::syscall::errno_name_from_return_value(const int errnum) {
     case 514: return "ERESTARTNOHAND";
     case 516: return "ERESTART_RESTARTBLOCK";
     default:
-        if (const char *name = strerrorname_np(errnum)) {
+        if (const char *name = strerrorname_np(errnum))
+        {
             return name;
         }
         return "ERRNO_" + std::to_string(errnum);
@@ -445,16 +448,16 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
             if (parseResult.highPrecisionEntryTime)
             {
                 const auto us_total = std::chrono::duration_cast<std::chrono::microseconds>(
-                    tp.time_since_epoch()
-                ) % 1'000'000;
+                                          tp.time_since_epoch()
+                                      ) % 1'000'000;
 
                 const auto ms = us_total.count() / 1000;
                 const auto us = us_total.count() % 1000;
 
                 oss << "."
-                    << std::setfill('0') << std::setw(3) << ms
-                    << "'"
-                    << std::setfill('0') << std::setw(3) << us;
+                        << std::setfill('0') << std::setw(3) << ms
+                        << "'"
+                        << std::setfill('0') << std::setw(3) << us;
             }
 
             sc_line += cf.apply(Timestamp, oss.str()) + " ";
@@ -467,7 +470,7 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
         {
             if (info.args[i].name == "-") break;
             if (i != 0) sc_line += ", ";
-            sc_line += cf.apply(ArgName, info.args[i].name); // TODO - loci argname in argtype
+            sc_line += cf.apply(ArgName, info.args[i].name);
             sc_line += "=";
 
             if (!syscall.enrichedArguments[i].empty())
@@ -483,7 +486,8 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
         if (!syscall_does_not_return(syscall.nr))
         {
             sc_line += " = ";
-            sc_line += cf.apply(syscall.return_value >= 0 ? RetSuccess : RetError, std::to_string(syscall.return_value));
+            sc_line += cf.apply(syscall.return_value >= 0 ? RetSuccess : RetError,
+                                std::to_string(syscall.return_value));
 
             if (-4095 < syscall.return_value && syscall.return_value < 0)
             {
@@ -502,9 +506,8 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
 
         if (parseResult.showDuration)
         {
-            const auto duration = syscall.highresExitTimePoint - syscall.highresEntryTimePoint;
-            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(duration);
-            const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+            const auto us = utils::get_duration_us(syscall.highresEntryTimePoint, syscall.highresExitTimePoint);
+            const auto ns = utils::get_duration_ns(syscall.highresEntryTimePoint, syscall.highresExitTimePoint);
 
             std::string durationStr;
             durationStr += " <";
@@ -524,6 +527,99 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
     }
 }
 
+void trace::syscall::handle_syscall_summary_print(
+    const options::ParseResult &parseResult,
+    const std::vector<CompletedSyscall> &completedSyscalls) {
+    if (!parseResult.showSummary)
+        return;
+
+    std::unordered_map<unsigned long, SummaryEntry> summary;
+
+    std::chrono::microseconds totalDuration{};
+    std::size_t totalCalls{};
+    std::size_t totalErrors{};
+
+    for (const auto &syscall: completedSyscalls)
+    {
+        auto &[numOfCalls, numOfErrors, usecsTotal] = summary[syscall.nr];
+
+        const auto duration = std::chrono::microseconds{
+            utils::get_duration_us(
+                syscall.highresEntryTimePoint,
+                syscall.highresExitTimePoint)
+        };
+
+        ++numOfCalls;
+        usecsTotal += duration;
+
+        if (syscall.return_value < 0)
+        {
+            ++numOfErrors;
+            ++totalErrors;
+        }
+
+        totalDuration += duration;
+        ++totalCalls;
+    }
+
+    std::vector<std::pair<unsigned long, SummaryEntry> > sortedSummary(
+        summary.begin(),
+        summary.end());
+
+    std::ranges::sort(sortedSummary, [](const auto &lhs, const auto &rhs) {
+        return lhs.second.usecsTotal > rhs.second.usecsTotal;
+    });
+
+    std::cout
+            << "\n"
+            << "============================================================\n"
+            << "                    SYSCALL SUMMARY\n"
+            << "============================================================\n"
+            << "    % time     seconds   usecs/call     calls    errors  syscall\n"
+            << "    ------  ----------   ----------  --------  --------  --------\n";
+
+    for (const auto &[syscallNumber, entry]: sortedSummary)
+    {
+        const auto totalUsecs = totalDuration.count();
+        const auto entryUsecs = entry.usecsTotal.count();
+
+        const double percentage = totalUsecs == 0
+                                      ? 0.0
+                                      : (static_cast<double>(entryUsecs) * 100.0 / static_cast<double>(totalUsecs));
+
+        const double seconds = std::chrono::duration<double>(entry.usecsTotal).count();
+
+        const auto usecsPerCall = entry.numOfCalls == 0
+                                      ? 0
+                                      : entryUsecs /
+                                        static_cast<std::int64_t>(entry.numOfCalls);
+
+        std::cout
+                << std::fixed
+                << std::setprecision(2)
+                << std::setw(10) << percentage
+                << std::setprecision(6)
+                << std::setw(12) << seconds
+                << std::setw(13) << usecsPerCall
+                << std::setw(10) << entry.numOfCalls
+                << std::setw(10) << entry.numOfErrors
+                << "  " << syscall_table::get_syscall_info_from_nr(syscallNumber).name
+                << '\n';
+    }
+
+    std::cout
+            << "    ------  ----------   ----------  --------  --------  --------\n"
+            << std::fixed
+            << std::setprecision(2)
+            << std::setw(10) << (totalCalls == 0 ? 0.0 : 100.0)
+            << std::setprecision(6)
+            << std::setw(12)
+            << std::chrono::duration<double>(totalDuration).count()
+            << std::setw(13) << ""
+            << std::setw(10) << totalCalls
+            << std::setw(10) << totalErrors
+            << "  total\n";
+}
 
 bool trace::syscall::syscall_does_not_return(const unsigned long nr) {
     return nr == __NR_exit || nr == __NR_exit_group;

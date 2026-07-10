@@ -34,6 +34,12 @@ namespace trace::syscall{
         std::chrono::time_point<std::chrono::system_clock> highresExitTimePoint;
     };
 
+    struct SummaryEntry {
+        std::size_t numOfCalls{};
+        std::size_t numOfErrors{};
+        std::chrono::microseconds usecsTotal{};
+    };
+
     user_pt_regs get_registers(pid_t pid);
 
     std::string errno_name_from_return_value(int errnum);
@@ -41,6 +47,8 @@ namespace trace::syscall{
     bool is_restart_errno(int errnum);
 
     void handle_syscall_info_print(const options::ParseResult &parseResult, const CompletedSyscall &syscall);
+
+    void handle_syscall_summary_print(const options::ParseResult &parseResult, const std::vector<CompletedSyscall> &completedSyscalls);
 
     bool syscall_does_not_return(unsigned long nr);
 
