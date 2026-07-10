@@ -541,7 +541,12 @@ void trace::syscall::handle_syscall_summary_print(
 
     for (const auto &syscall: completedSyscalls)
     {
-        auto &[numOfCalls, numOfErrors, usecsTotal] = summary[syscall.nr];
+        if (const auto it = summary.find(syscall.nr); it == summary.end())
+        {
+            summary.insert(std::make_pair(syscall.nr, SummaryEntry{.name=syscall_table::get_syscall_info_from_nr(syscall.nr).name}));
+        }
+
+        auto &[name, numOfCalls, numOfErrors, usecsTotal] = summary[syscall.nr];
 
         const auto duration = std::chrono::microseconds{
             utils::get_duration_us(
@@ -562,12 +567,60 @@ void trace::syscall::handle_syscall_summary_print(
         ++totalCalls;
     }
 
-    std::vector<std::pair<unsigned long, SummaryEntry> > sortedSummary(
-        summary.begin(),
-        summary.end());
+    std::vector<std::pair<unsigned long, SummaryEntry> > sortedSummary(summary.begin(), summary.end());
 
-    std::ranges::sort(sortedSummary, [](const auto &lhs, const auto &rhs) {
-        return lhs.second.usecsTotal > rhs.second.usecsTotal;
+    std::ranges::sort(sortedSummary, [&parseResult](const auto &lhs, const auto &rhs) {
+        const auto &lhsEntry = lhs.second;
+        const auto &rhsEntry = rhs.second;
+
+        for (const options::SortBy sortOrder: parseResult.sortByOrder)
+        {
+            switch (sortOrder)
+            {
+            case options::SortBy::Time:
+            case options::SortBy::Seconds:
+                if (lhsEntry.usecsTotal != rhsEntry.usecsTotal)
+                    return lhsEntry.usecsTotal > rhsEntry.usecsTotal;
+                break;
+
+            case options::SortBy::Usecs: {
+                const auto lhsUsecs = lhsEntry.usecsTotal.count();
+                const auto rhsUsecs = rhsEntry.usecsTotal.count();
+
+                const auto lhsWeighted = lhsUsecs * static_cast<std::int64_t>(rhsEntry.numOfCalls);
+
+                const auto rhsWeighted = rhsUsecs * static_cast<std::int64_t>(lhsEntry.numOfCalls);
+
+                if (lhsWeighted != rhsWeighted)
+                    return lhsWeighted > rhsWeighted;
+
+                break;
+            }
+
+            case options::SortBy::Calls:
+                if (lhsEntry.numOfCalls != rhsEntry.numOfCalls)
+                    return lhsEntry.numOfCalls > rhsEntry.numOfCalls;
+                break;
+
+            case options::SortBy::Errors:
+                if (lhsEntry.numOfErrors != rhsEntry.numOfErrors)
+                    return lhsEntry.numOfErrors > rhsEntry.numOfErrors;
+                break;
+
+            case options::SortBy::Syscall: {
+                const auto lhsName = lhs.second.name;
+
+                const auto rhsName = rhs.second.name;
+
+                if (lhsName != rhsName)
+                    return lhsName < rhsName;
+
+                break;
+            }
+            }
+        }
+
+        return lhs.first < rhs.first;
     });
 
     std::cout

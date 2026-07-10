@@ -11,6 +11,7 @@
 #include <vector>
 #include <string_view>
 #include <unordered_set>
+#include <optional>
 
 namespace trace::options{
     enum class DurationUnit {
@@ -18,11 +19,20 @@ namespace trace::options{
         NS
     };
 
+    enum class SortBy {
+        Time,
+        Seconds,
+        Usecs,
+        Calls,
+        Errors,
+        Syscall
+    };
+
     enum class ParseStatus {
         Ok,
         HelpRequested,
         ErrorMissingProgramArg,
-        ErrorUnknownOption,
+        ErrorUnknownOption
     };
 
     struct TracedProgram {
@@ -31,6 +41,9 @@ namespace trace::options{
     };
 
     struct ParseResult {
+        using enum SortBy;
+        using enum formatter::ColorMode;
+
         ParseStatus status{ParseStatus::Ok};
         TracedProgram traced{};
         std::unordered_set<std::string> filterList{};
@@ -40,9 +53,13 @@ namespace trace::options{
         bool highPrecisionEntryTime{false};
         bool showDuration{false};
         DurationUnit durationUnit{DurationUnit::US};
-        formatter::ColorMode colorMode{formatter::ColorMode::Auto};
+        formatter::ColorMode colorMode{Auto};
         bool showSummary{false};
+        std::vector<SortBy> sortByOrder{Time, Seconds, Calls, Errors, Syscall};
     };
+
+    constexpr std::string_view colorModePrefix = "--color-mode=";
+    constexpr std::string_view sortPrefix = "--sort=";
 
     ParseResult parse(int argc, char *argv[]);
 
@@ -53,6 +70,20 @@ namespace trace::options{
     void print_unknown_option(const ParseResult &result, int argc, char *argv[]);
 
     std::unordered_set<std::string> parse_filter_list(const std::string &filterList);
+
+    [[nodiscard]]
+    constexpr std::optional<SortBy> get_sort(const std::string &str) noexcept {
+        using enum SortBy;
+
+        if (str == "time")    return Time;
+        if (str == "seconds") return Seconds;
+        if (str == "usecs")   return Usecs;
+        if (str == "calls")   return Calls;
+        if (str == "errors")  return Errors;
+        if (str == "syscall") return Syscall;
+
+        return std::nullopt;
+    }
 }
 
 #endif //TRACE_OPTIONS_HPP

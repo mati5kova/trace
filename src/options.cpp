@@ -8,7 +8,11 @@
 #include <string>
 #include <string_view>
 #include <iterator>
+#include <sstream>
 #include <unordered_set>
+#include <vector>
+#include <algorithm>
+#include <ranges>
 
 trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) {
     ParseResult result;
@@ -84,11 +88,9 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
             continue;
         }
 
-        if (arg.starts_with("--color-mode="))
+        if (arg.starts_with(colorModePrefix))
         {
-            const auto prefixLen = std::string("--color-mode=").length();
-            const auto argLen = arg.length();
-            const auto sub = arg.substr(prefixLen, argLen);
+            const auto sub = arg.substr(colorModePrefix.length());
 
             using enum formatter::ColorMode;
             if (sub == "always")
@@ -110,6 +112,40 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
         if (arg == "-s" || arg == "--summary")
         {
             result.showSummary = true;
+            continue;
+        }
+
+        if (arg.starts_with(sortPrefix))
+        {
+            const auto sub = arg.substr(sortPrefix.length());
+
+            std::size_t rank{0};
+
+            std::stringstream cols{std::string{sub}};
+            std::string desiredCol;
+            while (std::getline(cols, desiredCol, '/'))
+            {
+                const auto sortByCol = get_sort(desiredCol);
+                if (!sortByCol.has_value())
+                {
+                    result.status = ParseStatus::ErrorUnknownOption;
+                    return result;
+                }
+
+                const auto destination = result.sortByOrder.begin() + static_cast<ptrdiff_t>(rank++);
+
+                const auto it = std::ranges::find(destination, result.sortByOrder.end(), sortByCol.value());
+                if (it == result.sortByOrder.end())
+                {
+                    result.status = ParseStatus::ErrorUnknownOption;
+                    return result;
+                }
+
+                // rotate verzija - boljsa
+                std::ranges::rotate(destination, it, std::next(it));
+                // swap verzija
+                //std::ranges::iter_swap(result.sortByOrder.begin() + rank++, it);
+            }
             continue;
         }
 
@@ -145,20 +181,38 @@ void trace::options::print_help(const std::string_view executableName) {
     std::cout
             << "Usage:\n"
             << "  " << executableName << " [options] -- program [args...]\n"
-            << "  " << executableName << " [options]  ./program [args...]\n"
+            << "  " << executableName << " [options] ./program [args...]\n"
             << "\n"
             << "Options:\n"
             << "  -h, --help                      Show this help message\n"
             << "  -f, --filter LIST               Trace only selected syscalls\n"
-            << "                                  LIST is a comma-seperated list of syscall names or numbers\n"
-            << "                                  Example: --filter write,63,221,clone\n"
-            << "  -t, -tt --time, -ttime          Show syscall entry time (-t wall clock, -tt wall clock high precision)\n"
+            << "                                  LIST is a comma-separated list of syscall\n"
+            << "                                  names or numbers\n"
+            << "                                  Example: --filter=write,63,221,clone\n"
+            << "  -t, -tt, --time, --ttime        Show syscall entry time\n"
+            << "                                  -t   wall-clock time\n"
+            << "                                  -tt  wall-clock time with high precision\n"
             << "  -d, --duration PRECISION        Show syscall duration\n"
-            << "                                  PRECISION is either us (microseconds) or ns (nanoseconds)\n"
-            << "                                  The default value is us\n"
-            << "  --color-mode=MODE               MODE is one of auto/always/never\n"
-            << "                                  Default value is auto\n"
-            << "  -s, --summary                   Print the summary at the end of program trace"
+            << "                                  PRECISION is either us (microseconds) or\n"
+            << "                                  ns (nanoseconds)\n"
+            << "                                  Default: us\n"
+            << "  --color-mode=MODE               Set output color mode\n"
+            << "                                  MODE is one of: auto, always, never\n"
+            << "                                  Default: auto\n"
+            << "  -s, --summary                   Print the syscall summary after the trace\n"
+            << "  --sort=COL1/COL2/...            Sort the summary by one or more columns\n"
+            << "                                  Available columns:\n"
+            << "                                    time      percentage of total syscall time\n"
+            << "                                    seconds   total time spent in the syscall\n"
+            << "                                    usecs     average microseconds per call\n"
+            << "                                    calls     number of syscall invocations\n"
+            << "                                    errors    number of failed invocations\n"
+            << "                                    syscall   syscall name\n"
+            << "                                  Columns are applied in priority order.\n"
+            << "                                  Equal values are resolved using the next\n"
+            << "                                  specified column.\n"
+            << "                                  Example: --sort=seconds/calls/syscall\n"
+            << "                                  Default: time/seconds/calls/errors/syscall\n"
             << std::endl;
 }
 

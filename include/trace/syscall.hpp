@@ -35,6 +35,7 @@ namespace trace::syscall{
     };
 
     struct SummaryEntry {
+        std::string_view name{};
         std::size_t numOfCalls{};
         std::size_t numOfErrors{};
         std::chrono::microseconds usecsTotal{};
