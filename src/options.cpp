@@ -3,6 +3,7 @@
 //
 
 #include "trace/options.hpp"
+#include "trace/utils.hpp"
 
 #include <iostream>
 #include <string>
@@ -12,6 +13,7 @@
 #include <unordered_set>
 #include <vector>
 #include <algorithm>
+#include <assert.h>
 #include <ranges>
 
 trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) {
@@ -152,6 +154,56 @@ trace::options::ParseResult trace::options::parse(const int argc, char *argv[]) 
             continue;
         }
 
+        if (arg.starts_with(bufferLenPrefix))
+        {
+            const auto sub = arg.substr(bufferLenPrefix.length());
+
+            const auto num = utils::strview_to_size_t(sub);
+            if (!num.has_value())
+            {
+                result.error_arg_index = i;
+                result.status = ParseStatus::ErrorUnknownOption;
+                return result;
+            }
+
+            if (num.value() <= 0 || num.value() > 4096)
+            {
+                std::cerr << "Max buffer length must be inside of interval (0, 4096].\n";
+                result.error_arg_index = i;
+                result.status = ParseStatus::ErrorUnknownOption;
+                return result;
+            }
+
+            result.maxBufferLen = num.value();
+
+            continue;
+        }
+
+        if (arg.starts_with(arrayLenPrefix))
+        {
+            const auto sub = arg.substr(arrayLenPrefix.length());
+
+            const auto num = utils::strview_to_size_t(sub);
+            if (!num.has_value())
+            {
+                result.error_arg_index = i;
+                result.status = ParseStatus::ErrorUnknownOption;
+                return result;
+            }
+
+            if (num.value() <= 0 || num.value() > 1024)
+            {
+                std::cerr << "Array length must be inside of interval (0, 1024].\n";
+                result.error_arg_index = i;
+                result.status = ParseStatus::ErrorUnknownOption;
+                return result;
+            }
+
+            result.maxArrayLen = num.value();
+
+            continue;
+        }
+
         if (arg == "--" || arg.starts_with("./"))
         {
             if (i + 1 >= argc)
@@ -186,24 +238,50 @@ void trace::options::print_help(const std::string_view executableName) {
             << "  " << executableName << " [options] -- program [args...]\n"
             << "  " << executableName << " [options] ./program [args...]\n"
             << "\n"
+            << "Trace system calls made by the specified program.\n"
+            << "\n"
             << "Options:\n"
-            << "  -h, --help                      Show this help message\n"
-            << "  -f, --filter LIST               Trace only selected syscalls\n"
+            << "  -h, --help                      Show this help message and exit\n"
+            << "\n"
+            << "  -f, --filter LIST               Trace only selected system calls\n"
             << "                                  LIST is a comma-separated list of syscall\n"
             << "                                  names or numbers\n"
-            << "                                  Example: --filter=write,63,221,clone\n"
-            << "  -t, -tt, --time, --ttime        Show syscall entry time\n"
-            << "                                  -t   wall-clock time\n"
-            << "                                  -tt  wall-clock time with high precision\n"
-            << "  -d, --duration PRECISION        Show syscall duration\n"
-            << "                                  PRECISION is either us (microseconds) or\n"
-            << "                                  ns (nanoseconds)\n"
+            << "                                  Example: --filter write,63,221,clone\n"
+            << "\n"
+            << "  -t, --time                      Show wall-clock syscall entry time\n"
+            << "  -tt, --ttime                    Show wall-clock syscall entry time with\n"
+            << "                                  microsecond precision\n"
+            << "\n"
+            << "  -d, --duration [UNIT]           Show syscall duration\n"
+            << "                                  UNIT is one of:\n"
+            << "                                    us   microseconds\n"
+            << "                                    ns   nanoseconds\n"
             << "                                  Default: us\n"
+            << "\n"
             << "  --color-mode=MODE               Set output color mode\n"
-            << "                                  MODE is one of: auto, always, never\n"
+            << "                                  MODE is one of:\n"
+            << "                                    auto     use colors when appropriate\n"
+            << "                                    always   always use colors\n"
+            << "                                    never    never use colors\n"
             << "                                  Default: auto\n"
-            << "  -s, --summary                   Print the syscall summary after the trace\n"
-            << "  --sort=COL1/COL2/...            Sort the summary by one or more columns\n"
+            << "\n"
+            << "  --buffer-len=LEN                Limit the number of bytes displayed for\n"
+            << "                                  enriched strings and buffers\n"
+            << "                                  Longer values are truncated and suffixed\n"
+            << "                                  with \"...\"\n"
+            << "                                  Valid range: 1-4096\n"
+            << "                                  Default: 64\n"
+            << "\n"
+            << "  --array-len=LEN                 Limit the number of elements displayed for\n"
+            << "                                  enriched arrays, such as argv and envp\n"
+            << "                                  Longer arrays are truncated and suffixed\n"
+            << "                                  with \"...\"\n"
+            << "                                  Valid range: 1-1024\n"
+            << "                                  Default: 8\n"
+            << "\n"
+            << "  -s, --summary                   Print a syscall summary after tracing ends\n"
+            << "\n"
+            << "  --sort=COL1/COL2/...            Set summary sorting columns in priority order\n"
             << "                                  Available columns:\n"
             << "                                    time      percentage of total syscall time\n"
             << "                                    seconds   total time spent in the syscall\n"
@@ -211,11 +289,19 @@ void trace::options::print_help(const std::string_view executableName) {
             << "                                    calls     number of syscall invocations\n"
             << "                                    errors    number of failed invocations\n"
             << "                                    syscall   syscall name\n"
-            << "                                  Columns are applied in priority order.\n"
             << "                                  Equal values are resolved using the next\n"
-            << "                                  specified column.\n"
+            << "                                  specified column\n"
             << "                                  Example: --sort=seconds/calls/syscall\n"
             << "                                  Default: time/seconds/calls/errors/syscall\n"
+            << "\n"
+            << "Arguments after '--' or './program' are passed directly to the traced program.\n"
+            << "\n"
+            << "Examples:\n"
+            << "  " << executableName << " -- /bin/ls -la\n"
+            << "  " << executableName << " -tt -d ns -- /bin/echo hello\n"
+            << "  " << executableName << " --filter read,write,openat -- ./program arg1\n"
+            << "  " << executableName << " --buffer-len=128 --array-len=16 -- ./program\n"
+            << "  " << executableName << " -s --sort=seconds/calls/syscall -- ./program\n"
             << std::endl;
 }
 

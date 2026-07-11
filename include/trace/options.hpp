@@ -56,10 +56,15 @@ namespace trace::options{
         formatter::ColorMode colorMode{Auto};
         bool showSummary{false};
         std::vector<SortBy> sortByOrder{Time, Seconds, Calls, Errors, Syscall};
+        std::size_t maxBufferLen{64};
+        std::size_t maxArrayLen{8};
     };
 
     constexpr std::string_view colorModePrefix = "--color-mode=";
-    constexpr std::string_view sortPrefix = "--sort=";
+    constexpr std::string_view sortPrefix      = "--sort=";
+    constexpr std::string_view bufferLenPrefix = "--buffer-len=";
+    constexpr std::string_view arrayLenPrefix  = "--array-len=";
+
 
     ParseResult parse(int argc, char *argv[]);
 
