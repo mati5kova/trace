@@ -7,6 +7,8 @@
 
 #include <chrono>
 #include <string>
+#include <optional>
+#include <string_view>
 
 namespace trace::utils{
     void replace_escape_characters_with_printable(std::string &str);
@@ -16,6 +18,8 @@ namespace trace::utils{
 
     std::chrono::nanoseconds get_duration_ns(std::chrono::time_point<std::chrono::system_clock> t1,
                                              std::chrono::time_point<std::chrono::system_clock> t2);
+
+    std::optional<std::size_t> strview_to_size_t(std::string_view str, int base=10);
 
 }
 
