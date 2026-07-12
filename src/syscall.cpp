@@ -27,6 +27,8 @@
 #include <iomanip>
 #include <unordered_map>
 #include <algorithm>
+#include <cstdint>
+#include <cstddef>
 
 user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     user_pt_regs regs{};
@@ -45,109 +47,146 @@ user_pt_regs trace::syscall::get_registers(const pid_t pid) {
     return regs;
 }
 
-std::optional<std::string> trace::syscall::helper_get_fd_arg0(const SyscallEntry &syscall, const int position) {
-    const unsigned long long fd = syscall.registers.regs[position];
+std::optional<std::string> trace::syscall::helper_get_fd_arg0(const SyscallEntry &syscall, const unsigned int position,
+                                                              const std::size_t maxBufferLen) {
+    if (position >= std::size(syscall.registers.regs) || maxBufferLen == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto fd = syscall.registers.regs[position];
     const std::string path = "/proc/" + std::to_string(syscall.pid) + "/fd/" + std::to_string(fd);
-    std::string linkreadFDLocation(256, '\0');
+    std::string linkreadFDLocation(maxBufferLen + 1, '\0');
 
     const ssize_t n = readlink(path.c_str(), linkreadFDLocation.data(), linkreadFDLocation.size());
-    if (n == -1)
+    if (n < 0)
     {
         return {};
     }
 
-    if (static_cast<size_t>(n) < linkreadFDLocation.size())
-    {
-        linkreadFDLocation.resize(static_cast<size_t>(n));
-    }
+    const auto bytesRead = static_cast<std::size_t>(n);
+    const bool truncated = bytesRead > maxBufferLen;
+
+    linkreadFDLocation.resize(std::min(bytesRead, maxBufferLen));
 
     utils::replace_escape_characters_with_printable(linkreadFDLocation);
 
-    return linkreadFDLocation;
+    if (truncated)
+        linkreadFDLocation += "...";
+
+    return '"' + linkreadFDLocation + '"';
 }
 
-std::optional<std::string> trace::syscall::helper_get_fd_arg0(const CompletedSyscall &syscall, const int position) {
-    const unsigned long long fd = syscall.exit_registers.regs[position];
+std::optional<std::string> trace::syscall::helper_get_fd_arg0(const CompletedSyscall &syscall,
+                                                              const unsigned int position,
+                                                              const std::size_t maxBufferLen) {
+    if (position >= std::size(syscall.exit_registers.regs) || maxBufferLen == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto fd = syscall.exit_registers.regs[position];
     const std::string path = "/proc/" + std::to_string(syscall.pid) + "/fd/" + std::to_string(fd);
-    std::string linkreadFDLocation(256, '\0');
+    std::string linkreadFDLocation(maxBufferLen + 1, '\0');
 
     const ssize_t n = readlink(path.c_str(), linkreadFDLocation.data(), linkreadFDLocation.size());
-    if (n == -1)
+    if (n < 0)
     {
         return {};
     }
 
-    if (static_cast<size_t>(n) < linkreadFDLocation.size())
-    {
-        linkreadFDLocation.resize(static_cast<size_t>(n));
-    }
+    const auto bytesRead = static_cast<std::size_t>(n);
+    const bool truncated = bytesRead > maxBufferLen;
+
+    linkreadFDLocation.resize(std::min(bytesRead, maxBufferLen));
 
     utils::replace_escape_characters_with_printable(linkreadFDLocation);
 
-    return linkreadFDLocation;
+    if (truncated)
+        linkreadFDLocation += "...";
+
+    return '"' + linkreadFDLocation + '"';
 }
 
 std::optional<std::string> trace::syscall::helper_get_numbytes_from_buffer(
-    const CompletedSyscall &syscall, const user_pt_regs &regs, const int position, const long numOfBytes) {
-    if (numOfBytes <= 0) return {};
+    const CompletedSyscall &syscall, const user_pt_regs &regs, const unsigned int position,
+    const std::size_t numOfBytes,
+    const std::size_t maxBufferLen) {
+    if (maxBufferLen == 0)
+        return std::nullopt;
 
-    const unsigned long long addr = regs.regs[position];
+    if (numOfBytes == 0)
+        return std::string{""};
+
+    if (position >= std::size(regs.regs))
+        return std::nullopt;
+
+    const std::size_t bytesToRead = std::min(numOfBytes, maxBufferLen);
+    const bool truncated = numOfBytes > maxBufferLen;
+
+    const auto addr = static_cast<std::uintptr_t>(regs.regs[position]);
+    if (bytesToRead != 0 && bytesToRead - 1 > std::numeric_limits<std::uintptr_t>::max() - addr)
+        return std::nullopt;
+
     std::string buffer;
-    buffer.reserve(static_cast<std::size_t>(numOfBytes));
+    buffer.reserve(bytesToRead + (truncated ? 3 : 0));
 
-    for (long offset = 0; offset < numOfBytes; offset += sizeof(long))
+    for (std::size_t offset = 0; offset < bytesToRead; offset += sizeof(long))
     {
         errno = 0;
         long word = ptrace(PTRACE_PEEKDATA, syscall.pid,
-                           reinterpret_cast<void *>(addr + static_cast<std::size_t>(offset)), nullptr);
+                           reinterpret_cast<void *>(addr + offset), nullptr);
         if (word == -1 && errno != 0)
         {
             std::perror("ptrace(PTRACE_PEEKDATA)");
-            return {};
+            return std::nullopt;
         }
 
-        const char *chars = reinterpret_cast<char *>(&word);
+        const std::size_t bytesLeft = bytesToRead - offset;
+        const std::size_t bytesToCopy = std::min<std::size_t>(sizeof(long), bytesLeft);
 
-        const long bytesLeft = numOfBytes - offset;
-        const long bytesToPrint = std::min<long>(sizeof(long), bytesLeft);
-
-        for (long j = 0; j < bytesToPrint; ++j)
-        {
-            buffer += chars[j];
-        }
+        buffer.append(reinterpret_cast<const char *>(&word), bytesToCopy);
     }
 
     utils::replace_escape_characters_with_printable(buffer);
 
-    return buffer;
+    if (truncated)
+    {
+        buffer += "...";
+    }
+
+    return '"' + buffer + '"';
 }
 
-std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, const unsigned long long addr,
-                                                               const std::size_t max_len) {
-    if (addr == 0) return std::string("NULL");
+std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, const std::uintptr_t addr,
+                                                               const std::size_t maxBufferLen) {
+    if (addr == 0)
+        return std::string{};
+
+    if (maxBufferLen == 0)
+        return std::nullopt;
 
     std::string result;
-    result.reserve(std::min<std::size_t>(max_len, 256));
+    result.reserve(maxBufferLen);
 
-    for (std::size_t offset = 0; offset < max_len; offset += sizeof(long))
+    for (std::size_t offset = 0; offset < maxBufferLen; offset += sizeof(long))
     {
         errno = 0;
         long word = ptrace(PTRACE_PEEKDATA, pid, reinterpret_cast<void *>(addr + offset), nullptr);
-
         if (word == -1 && errno != 0)
         {
             std::perror("ptrace(PTRACE_PEEKDATA)");
-            return {};
+            return std::nullopt;
         }
 
-        auto chars = reinterpret_cast<const char *>(&word);
+        const auto chars = reinterpret_cast<const char *>(&word);
 
-        for (std::size_t i = 0; i < sizeof(long) && offset + i < max_len; ++i)
+        for (std::size_t i = 0; i < sizeof(long) && offset + i < maxBufferLen; ++i)
         {
             if (chars[i] == '\0')
             {
                 utils::replace_escape_characters_with_printable(result);
-                return result;
+                return '"' + result + '"';
             }
 
             result += chars[i];
@@ -155,78 +194,95 @@ std::optional<std::string> trace::syscall::helper_get_c_string(const pid_t pid, 
     }
 
     result += "...";
+
     utils::replace_escape_characters_with_printable(result);
-    return result;
+
+    return '"' + result + '"';
 }
 
-std::optional<unsigned long long> trace::syscall::helper_get_pointer(const pid_t pid, const unsigned long long addr) {
+std::optional<std::uintptr_t> trace::syscall::helper_get_pointer(const pid_t pid, const std::uintptr_t addr) {
+    if (addr == 0)
+        return std::nullopt;
+
     errno = 0;
     const long word = ptrace(PTRACE_PEEKDATA, pid, reinterpret_cast<void *>(addr), nullptr);
-
     if (word == -1 && errno != 0)
     {
         std::perror("ptrace(PTRACE_PEEKDATA)");
-        return {};
+        return std::nullopt;
     }
 
-    return static_cast<unsigned long long>(word);
+    return static_cast<std::uintptr_t>(word);
 }
 
-std::optional<std::string> trace::syscall::helper_get_string_array(const pid_t pid, const unsigned long long addr,
-                                                                   const std::size_t max_items,
-                                                                   const std::size_t max_string_len) {
-    if (addr == 0) return std::string("NULL");
+std::optional<std::string> trace::syscall::helper_get_string_array(const pid_t pid, const std::uintptr_t addr,
+                                                                   const std::size_t maxBufferLen,
+                                                                   const std::size_t maxArrayLen) {
+    if (addr == 0)
+        return std::string{};
+
+    if (maxArrayLen == 0 || maxBufferLen == 0)
+        return std::nullopt;
 
     std::string result = "[";
 
-    for (std::size_t i = 0; i < max_items; ++i)
+    bool truncated{true};
+
+    for (std::size_t i = 0; i < maxArrayLen; ++i)
     {
-        const unsigned long long ptr_addr = addr + i * sizeof(unsigned long long);
+        const std::uintptr_t ptr_addr = addr + i * sizeof(std::uintptr_t);
 
         auto str_addr = helper_get_pointer(pid, ptr_addr);
         if (!str_addr.has_value())
         {
             if (i != 0) result += ", ";
             result += "?";
+            truncated = false;
             break;
         }
 
         if (str_addr.value() == 0)
         {
+            truncated = false;
             break;
         }
 
-        auto s = helper_get_c_string(pid, str_addr.value(), max_string_len);
+        auto s = helper_get_c_string(pid, str_addr.value(), maxBufferLen);
 
         if (i != 0) result += ", ";
 
         if (s.has_value())
         {
-            result += "\"";
             result += s.value();
-            result += "\"";
         } else
         {
             result += "0x";
             char buf[32];
-            std::snprintf(buf, sizeof(buf), "%llx", str_addr.value());
+            std::snprintf(buf, sizeof(buf), "%lx", str_addr.value());
             result += buf;
         }
     }
+
+    if (truncated) result += ", ...";
 
     result += "]";
     return result;
 }
 
-std::optional<std::string> trace::syscall::helper_get_dfd(const SyscallEntry &syscall, const int position) {
+std::optional<std::string> trace::syscall::helper_get_dfd(const SyscallEntry &syscall, const unsigned int position,
+                                                          const std::size_t maxBufferLen) {
+    if (position >= std::size(syscall.registers.regs) || maxBufferLen == 0)
+        return std::nullopt;
+
     const auto dfd = static_cast<long long>(syscall.registers.regs[position]);
-    std::optional<std::string> resolvedDfd;
+    std::optional<std::string> resolvedDfd{std::nullopt};
+
     if (dfd == AT_FDCWD)
     {
-        resolvedDfd = "AT_FDCWD";
+        resolvedDfd = "\"AT_FDCWD\"";
     } else
     {
-        const auto readlnk = helper_get_fd_arg0(syscall, 0);
+        const auto readlnk = helper_get_fd_arg0(syscall, 0, maxBufferLen);
         if (readlnk.has_value())
         {
             resolvedDfd = std::to_string(dfd) + "<" + readlnk.value() + ">";
@@ -236,15 +292,20 @@ std::optional<std::string> trace::syscall::helper_get_dfd(const SyscallEntry &sy
     return resolvedDfd;
 }
 
-std::optional<std::string> trace::syscall::helper_get_dfd(const CompletedSyscall &syscall, const int position) {
+std::optional<std::string> trace::syscall::helper_get_dfd(const CompletedSyscall &syscall, const unsigned int position,
+                                                          const std::size_t maxBufferLen) {
+    if (position >= std::size(syscall.exit_registers.regs) || maxBufferLen == 0)
+        return std::nullopt;
+
     const auto dfd = static_cast<long long>(syscall.exit_registers.regs[position]);
     std::optional<std::string> resolvedDfd;
+
     if (dfd == AT_FDCWD)
     {
-        resolvedDfd = "AT_FDCWD";
+        resolvedDfd = "\"AT_FDCWD\"";
     } else
     {
-        const auto readlnk = helper_get_fd_arg0(syscall, 0);
+        const auto readlnk = helper_get_fd_arg0(syscall, 0, maxBufferLen);
         if (readlnk.has_value())
         {
             resolvedDfd = std::to_string(dfd) + "<" + readlnk.value() + ">";
@@ -254,64 +315,67 @@ std::optional<std::string> trace::syscall::helper_get_dfd(const CompletedSyscall
     return resolvedDfd;
 }
 
-void trace::syscall::enrich_syscall_close_entry(SyscallEntry &syscall) {
-    auto fd = helper_get_fd_arg0(syscall, 0);
+void trace::syscall::enrich_syscall_close_entry(SyscallEntry &syscall, const size_t maxBufferLen) {
+    const auto fd = helper_get_fd_arg0(syscall, 0, maxBufferLen);
     if (fd.has_value()) syscall.enrichedArguments[0] = fd.value();
 }
 
-void trace::syscall::enrich_syscall_read_entry(SyscallEntry &syscall) {
-    auto fd = helper_get_fd_arg0(syscall, 0);
+void trace::syscall::enrich_syscall_read_entry(SyscallEntry &syscall, const size_t maxBufferLen) {
+    const auto fd = helper_get_fd_arg0(syscall, 0, maxBufferLen);
     if (fd.has_value()) syscall.enrichedArguments[0] = fd.value();
 }
 
-void trace::syscall::enrich_syscall_read_exit(CompletedSyscall &syscall) {
-    auto nread = syscall.return_value;
+void trace::syscall::enrich_syscall_read_exit(CompletedSyscall &syscall, const size_t maxBufferLen) {
+    const auto nread = syscall.return_value;
     if (nread <= 0) return;
 
-    const auto buffer = helper_get_numbytes_from_buffer(syscall, syscall.exit_registers, 1, syscall.return_value);
+    const auto buffer = helper_get_numbytes_from_buffer(syscall, syscall.exit_registers, 1,
+                                                        static_cast<std::size_t>(syscall.return_value), maxBufferLen);
 
     if (!buffer.has_value()) return;
 
     syscall.enrichedArguments[1] = buffer.value();
 }
 
-void trace::syscall::enrich_syscall_write_exit(CompletedSyscall &syscall) {
+void trace::syscall::enrich_syscall_write_exit(CompletedSyscall &syscall, const size_t maxBufferLen) {
     auto nread = syscall.return_value;
     if (nread <= 0) return;
 
-    const auto buffer = helper_get_numbytes_from_buffer(syscall, syscall.exit_registers, 1, syscall.return_value);
+    const auto buffer = helper_get_numbytes_from_buffer(syscall, syscall.exit_registers, 1,
+                                                        static_cast<std::size_t>(syscall.return_value), maxBufferLen);
     if (buffer.has_value())
     {
         syscall.enrichedArguments[1] = buffer.value();
     }
 }
 
-void trace::syscall::enrich_syscall_execve_entry(SyscallEntry &syscall) {
+void trace::syscall::enrich_syscall_execve_entry(SyscallEntry &syscall, const size_t maxBufferLen,
+                                                 const size_t maxArrayLen) {
     const unsigned long long pathnameAddr = syscall.registers.regs[0];
     const unsigned long long argvAddr = syscall.registers.regs[1];
     const unsigned long long envpAddr = syscall.registers.regs[2];
 
-    const auto pathname = helper_get_c_string(syscall.pid, pathnameAddr, 512);
+    const auto pathname = helper_get_c_string(syscall.pid, pathnameAddr, maxBufferLen);
     if (pathname.has_value())
     {
         syscall.enrichedArguments[0] = pathname.value();
     }
 
-    const auto argv = helper_get_string_array(syscall.pid, argvAddr, 16, 128);
+    const auto argv = helper_get_string_array(syscall.pid, argvAddr, maxBufferLen, maxArrayLen);
     if (argv.has_value())
     {
         syscall.enrichedArguments[1] = argv.value();
     }
 
-    const auto envp = helper_get_string_array(syscall.pid, envpAddr, 8, 128);
+    const auto envp = helper_get_string_array(syscall.pid, envpAddr, maxBufferLen, maxArrayLen);
     if (envp.has_value())
     {
         syscall.enrichedArguments[2] = envp.value();
     }
 }
 
-void trace::syscall::enrich_syscall_openat_entry(SyscallEntry &syscall) {
-    const auto resolvedDfd = helper_get_dfd(syscall, 0);
+void trace::syscall::enrich_syscall_openat_entry(SyscallEntry &syscall, const size_t maxBufferLen) {
+    const auto resolvedDfd = helper_get_dfd(syscall, 0, maxBufferLen);
     if (resolvedDfd.has_value())
     {
         syscall.enrichedArguments[0] = resolvedDfd.value();
@@ -324,70 +388,74 @@ void trace::syscall::enrich_syscall_openat_entry(SyscallEntry &syscall) {
     }
 }
 
-void enrich_syscall_readlinkat_entry(trace::syscall::SyscallEntry &syscall) {
-    const auto dfd = helper_get_dfd(syscall, 0);
+void enrich_syscall_readlinkat_entry(trace::syscall::SyscallEntry &syscall, const size_t maxBufferLen) {
+    const auto dfd = helper_get_dfd(syscall, 0, maxBufferLen);
     if (dfd.has_value())
     {
         syscall.enrichedArguments[0] = dfd.value();
     }
 
     const unsigned long long pathAddr = syscall.registers.regs[1];
-    const auto path = trace::syscall::helper_get_c_string(syscall.pid, pathAddr, 4096);
+    const auto path = trace::syscall::helper_get_c_string(syscall.pid, pathAddr, maxBufferLen);
     if (path.has_value())
     {
         syscall.enrichedArguments[1] = path.value();
     }
 }
 
-void trace::syscall::enrich_syscall_readlinkat_exit(CompletedSyscall &syscall) {
+void trace::syscall::enrich_syscall_readlinkat_exit(CompletedSyscall &syscall, const size_t maxBufferLen) {
     if (syscall.return_value <= 0) return;
 
-    const auto buf = helper_get_numbytes_from_buffer(syscall, syscall.exit_registers, 2, syscall.return_value);
+    const auto buf = helper_get_numbytes_from_buffer(syscall, syscall.exit_registers, 2,
+                                                     static_cast<std::size_t>(syscall.return_value), maxBufferLen);
     if (buf.has_value())
     {
         syscall.enrichedArguments[2] = buf.value();
     }
 }
 
-void trace::syscall::enrich_syscall_getcwd_exit(CompletedSyscall &syscall) {
+void trace::syscall::enrich_syscall_getcwd_exit(CompletedSyscall &syscall, const size_t maxBufferLen) {
     if (syscall.return_value <= 0) return;
 
-    const auto buf = helper_get_numbytes_from_buffer(syscall, syscall.entry_registers, 0, syscall.return_value - 1);
+    const auto buf = helper_get_numbytes_from_buffer(syscall, syscall.entry_registers, 0,
+                                                     static_cast<std::size_t>(syscall.return_value - 1), maxBufferLen);
     if (buf.has_value())
     {
         syscall.enrichedArguments[0] = buf.value();
     }
 }
 
-void trace::syscall::enrich_syscall_entry(std::optional<SyscallEntry> &syscall) {
+void trace::syscall::enrich_syscall_entry(std::optional<SyscallEntry> &syscall, const size_t maxBufferLen,
+                                          const size_t maxArrayLen) {
     if (!syscall.has_value()) return;
 
     switch (syscall.value().nr)
     {
-    case __NR_openat: enrich_syscall_openat_entry(syscall.value());
+    case __NR_openat: enrich_syscall_openat_entry(syscall.value(), maxBufferLen);
         break;
-    case __NR_close: enrich_syscall_close_entry(syscall.value());
+    case __NR_close: enrich_syscall_close_entry(syscall.value(), maxBufferLen);
         break;
-    case __NR_read: enrich_syscall_read_entry(syscall.value());
+    case __NR_read: enrich_syscall_read_entry(syscall.value(), maxBufferLen);
         break;
-    case __NR_execve: enrich_syscall_execve_entry(syscall.value());
+    case __NR_execve: enrich_syscall_execve_entry(syscall.value(), maxBufferLen, maxArrayLen);
         break;
-    case __NR_readlinkat: enrich_syscall_readlinkat_entry(syscall.value());
+    case __NR_readlinkat: enrich_syscall_readlinkat_entry(syscall.value(), maxBufferLen);
         break;
     default: break;
     }
 }
 
-void trace::syscall::enrich_syscall_exit(CompletedSyscall &syscall) {
+void trace::syscall::enrich_syscall_exit(CompletedSyscall &syscall, const size_t maxBufferLen,
+                                         [[maybe_unused]] const size_t maxArrayLen) {
     switch (syscall.nr)
     {
-    case __NR_getcwd: enrich_syscall_getcwd_exit(syscall);
+    case __NR_getcwd: enrich_syscall_getcwd_exit(syscall, maxBufferLen);
         break;
-    case __NR_read: enrich_syscall_read_exit(syscall);
+    case __NR_read: enrich_syscall_read_exit(syscall, maxBufferLen);
         break;
-    case __NR_write: enrich_syscall_write_exit(syscall);
+    case __NR_write: enrich_syscall_write_exit(syscall, maxBufferLen);
         break;
-    case __NR_readlinkat: enrich_syscall_readlinkat_exit(syscall);
+    case __NR_readlinkat: enrich_syscall_readlinkat_exit(syscall, maxBufferLen);
         break;
     default: break;
     }
@@ -543,7 +611,9 @@ void trace::syscall::handle_syscall_summary_print(
     {
         if (const auto it = summary.find(syscall.nr); it == summary.end())
         {
-            summary.insert(std::make_pair(syscall.nr, SummaryEntry{.name=syscall_table::get_syscall_info_from_nr(syscall.nr).name}));
+            summary.insert(std::make_pair(syscall.nr, SummaryEntry{
+                                              .name = syscall_table::get_syscall_info_from_nr(syscall.nr).name
+                                          }));
         }
 
         auto &[name, numOfCalls, numOfErrors, usecsTotal] = summary[syscall.nr];

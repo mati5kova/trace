@@ -10,11 +10,10 @@
 
 #include <vector>
 
-namespace trace {
-
+namespace trace{
     class Tracer {
     public:
-        explicit Tracer(const options::ParseResult& parseResult) {
+        explicit Tracer(const options::ParseResult &parseResult) {
             programName_ = parseResult.traced.programName;
             programArgs_ = parseResult.traced.programArguments;
             parseResult_ = parseResult;
@@ -23,8 +22,8 @@ namespace trace {
         int run();
 
     private:
-        const char* programName_;
-        std::vector<char*> programArgs_;
+        const char *programName_;
+        std::vector<char *> programArgs_;
         std::vector<syscall::CompletedSyscall> completedSyscalls_;
         options::ParseResult parseResult_;
     };

@@ -251,7 +251,7 @@ int trace::Tracer::run() {
                         .highresEntryTimePoint = std::chrono::high_resolution_clock::now(),
                     };
 
-                    syscall::enrich_syscall_entry(currentSyscall);
+                    syscall::enrich_syscall_entry(currentSyscall, parseResult_.maxBufferLen, parseResult_.maxArrayLen);
 
                     // za exit in exit_group
                     if (currentSyscall.has_value())
@@ -307,7 +307,7 @@ int trace::Tracer::run() {
                         .highresExitTimePoint = std::chrono::high_resolution_clock::now(),
                     };
 
-                    syscall::enrich_syscall_exit(completed);
+                    syscall::enrich_syscall_exit(completed, parseResult_.maxBufferLen, parseResult_.maxArrayLen);
 
                     completedSyscalls_.push_back(completed);
 

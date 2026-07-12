@@ -4,7 +4,6 @@
 
 #include "trace/options.hpp"
 #include "trace/tracer.hpp"
-#include "trace/syscall_table.hpp"
 
 #include <exception>
 #include <iostream>
