@@ -522,14 +522,17 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
                 const auto ms = us_total.count() / 1000;
                 const auto us = us_total.count() % 1000;
 
-                oss << "."
-                        << std::setfill('0') << std::setw(3) << ms
-                        << "'"
-                        << std::setfill('0') << std::setw(3) << us;
+                oss
+                    << "."
+                    << std::setfill('0') << std::setw(3) << ms
+                    << "'"
+                    << std::setfill('0') << std::setw(3) << us;
             }
 
             sc_line += cf.apply(Timestamp, oss.str()) + " ";
         }
+
+        sc_line += cf.apply(Pid, "[pid " + std::to_string(syscall.pid) + "] ");
 
         sc_line += cf.apply(SyscallName, info.name);
         sc_line += +"[" + cf.apply(SyscallNr, std::to_string(syscall.nr)) + "] ";
@@ -543,7 +546,13 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
 
             if (!syscall.enrichedArguments[i].empty())
             {
-                sc_line += syscall.enrichedArguments[i];
+                if (syscall.enrichedArguments[i].starts_with('"') && syscall.enrichedArguments[i].ends_with('"'))
+                {
+                    sc_line += cf.apply(ArgValStr, syscall.enrichedArguments[i]);
+                } else
+                {
+                    sc_line += syscall.enrichedArguments[i];
+                }
             } else
             {
                 sc_line += std::to_string(syscall.entry_registers.regs[info.args[i].index]);
@@ -591,7 +600,7 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
             sc_line += cf.apply(Duration, durationStr);
         }
 
-        std::cout << sc_line << "\n";
+        std::cerr << sc_line << "\n";
     }
 }
 
@@ -693,7 +702,7 @@ void trace::syscall::handle_syscall_summary_print(
         return lhs.first < rhs.first;
     });
 
-    std::cout
+    std::cerr
             << "\n"
             << "============================================================\n"
             << "                    SYSCALL SUMMARY\n"
@@ -717,7 +726,7 @@ void trace::syscall::handle_syscall_summary_print(
                                       : entryUsecs /
                                         static_cast<std::int64_t>(entry.numOfCalls);
 
-        std::cout
+        std::cerr
                 << std::fixed
                 << std::setprecision(2)
                 << std::setw(10) << percentage
@@ -730,7 +739,7 @@ void trace::syscall::handle_syscall_summary_print(
                 << '\n';
     }
 
-    std::cout
+    std::cerr
             << "    ------  ----------   ----------  --------  --------  --------\n"
             << std::fixed
             << std::setprecision(2)

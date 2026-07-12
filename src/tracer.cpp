@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <format>
+#include <cstring>
 
 int trace::Tracer::run() {
     std::unordered_map<pid_t, process::ProcessState> tracedProcesses;
@@ -29,6 +30,8 @@ int trace::Tracer::run() {
     {
         throw std::runtime_error("failed to fork");
     }
+
+    std::optional<int> mainProcessResult{};
 
     if (pid == 0)
     {
@@ -104,13 +107,25 @@ int trace::Tracer::run() {
         // normalno se koncal, exit, _exit, return from main
         if (WIFEXITED(wstatus))
         {
+            const int exitStatus = WEXITSTATUS(wstatus);
+
+            if (pidOfChanged == pid)
+            {
+                mainProcessResult = exitStatus;
+            }
+
             if (tracedProcesses.erase(pidOfChanged) == 0)
             {
                 std::cerr << "tried to erase untracked pid";
                 return 1;
             }
-            std::cout << std::to_string(pidOfChanged) + " terminated normally with status " + std::to_string(
-                WEXITSTATUS(wstatus)) << "\n";
+
+            formatter::Formatter cf(parseResult_.colorMode);
+
+            std::string exitedStr = "[pid " + std::to_string(pidOfChanged) + "] +++ exited with " + std::to_string(exitStatus) + " +++\n";
+
+            std::cout << cf.apply(exitStatus == 0 ? formatter::StyleRole::ExitOk : formatter::StyleRole::ExitWarn, exitedStr);
+
             continue;
         }
 
@@ -122,8 +137,29 @@ int trace::Tracer::run() {
                 std::cerr << "tried to erase untracked pid";
                 return 1;
             }
-            std::cout << std::to_string(pidOfChanged) + " terminated by signal " + std::to_string(WTERMSIG(wstatus)) <<
-                    "\n";
+
+            const int signalNumber = WTERMSIG(wstatus);
+
+            if (pidOfChanged == pid)
+            {
+                mainProcessResult = 128 + signalNumber;
+            }
+
+            const char *signalDescription = strsignal(signalNumber);
+
+            formatter::Formatter cf(parseResult_.colorMode);
+            std::string signaledStr = "[pid " + std::to_string(pidOfChanged) + "] +++ killed by " + signal_abbreviation(signalNumber).data() + " (" + signalDescription + ")";
+
+#ifdef WCOREDUMP
+            if (WCOREDUMP(wstatus))
+            {
+                signaledStr += " (core dumped)";
+            }
+#endif
+
+            signaledStr += " +++\n";
+            std::cerr << cf.apply(formatter::StyleRole::Signaled, signaledStr);
+
             continue;
         }
 
@@ -266,7 +302,7 @@ int trace::Tracer::run() {
                                 .exit_registers = currentSyscall.value().registers,
                                 .enrichedArguments = currentSyscall.value().enrichedArguments,
                                 .return_value = 0,
-                                .highresEntryTimePoint = exitTimePoint,
+                                .highresEntryTimePoint = currentSyscall->highresEntryTimePoint,
                                 .highresExitTimePoint = exitTimePoint,
                             };
 
@@ -328,17 +364,51 @@ int trace::Tracer::run() {
                 continue;
             }
 
+            // To je pravi signal-stop, ne syscall-stop in ne ptrace event.
+            siginfo_t signalInfo{};
+
             errno = 0;
-            if (ptrace(PTRACE_SYSCALL, pidOfChanged, nullptr, signal) == -1 && errno != 0)
+            if (ptrace(PTRACE_GETSIGINFO, pidOfChanged, nullptr, &signalInfo) == -1)
+            {
+                // signalinfo vcasih ni na voljo
+                if (errno != EINVAL)
+                {
+                    std::perror("ptrace(PTRACE_GETSIGINFO)");
+                    return 1;
+                }
+            } else
+            {
+                formatter::Formatter cf(parseResult_.colorMode);
+
+                std::string stoppedStr = "[pid " + std::to_string(pidOfChanged) + "] --- " + signal_abbreviation(signal).data() + " {si_signo=" + signal_abbreviation(signalInfo.si_signo).data() + ", si_code=" + std::to_string(signalInfo.si_code);
+
+                if (signalInfo.si_pid != 0)
+                {
+                    stoppedStr += ", si_pid=" + std::to_string(signalInfo.si_pid) + ", si_uid=" + std::to_string(signalInfo.si_uid);
+                }
+
+                stoppedStr += "} ---\n";
+                std::cerr << cf.apply(formatter::StyleRole::Stopped, stoppedStr);
+            }
+
+            // posreduj isti signal naprej procesu
+            errno = 0;
+            if (ptrace(
+                    PTRACE_SYSCALL,
+                    pidOfChanged,
+                    nullptr,
+                    reinterpret_cast<void *>(static_cast<intptr_t>(signal))
+                ) == -1 && errno != 0)
             {
                 std::perror("ptrace(PTRACE_SYSCALL) signal");
                 return 1;
             }
+
             continue;
         }
     }
 
     syscall::handle_syscall_summary_print(parseResult_, completedSyscalls_);
 
-    return 0;
+    return mainProcessResult.value_or(1);
 }

@@ -10,13 +10,16 @@
 #include <string>
 #include <string_view>
 
-namespace trace::formatter::ansi {
+namespace trace::formatter::ansi{
     using namespace std::string_view_literals;
 
     constexpr auto reset = "\033[0m"sv;
     constexpr auto dim = "\033[2m"sv;
     constexpr auto green = "\033[32m"sv;
+    constexpr auto bold_green = "\033[1;32m"sv;
+    constexpr auto light_green = "\033[38;5;114m"sv;
     constexpr auto yellow = "\033[33m"sv;
+    constexpr auto bold_yellow  = "\033[1;33m"sv;
     constexpr auto blue = "\033[34m"sv;
     constexpr auto magenta = "\033[35m"sv;
     constexpr auto bright_cyan = "\033[96m"sv;
@@ -47,32 +50,35 @@ namespace trace::formatter{
         RetErrorName,
         RetErrorStr,
         Duration,
-        Event
+        Event,
+        ExitOk,
+        ExitWarn,
+        Signaled,
+        Stopped,
     };
 
     class Formatter {
     public:
-        explicit Formatter(const ColorMode mode, const int outputFd=STDOUT_FILENO)
-            :enabled_{should_enable(mode, outputFd)} {}
+        explicit Formatter(const ColorMode mode, const int outputFd = STDERR_FILENO)
+            : enabled_{should_enable(mode, outputFd)} {}
 
-        std::string apply(const StyleRole role, const std::string_view text) const {
+        [[nodiscard]] std::string apply(const StyleRole role, const std::string_view text) const {
             if (!enabled_ || text.empty()) return std::string(text);
 
             return std::string(code_for(role)) + std::string(text) + std::string(ansi::reset);
         }
 
         //overload ki preveri za nullptr za c-stringe
-        std::string apply(const StyleRole role, const char *text) const
-        {
-            if (text == nullptr) {
+        std::string apply(const StyleRole role, const char *text) const {
+            if (text == nullptr)
+            {
                 return apply(role, std::string_view{"NULL"});
             }
 
             return apply(role, std::string_view{text});
         }
 
-        bool enabled() const { return enabled_; };
-
+        [[nodiscard]] bool enabled() const { return enabled_; };
 
     private:
         bool enabled_;
@@ -86,15 +92,14 @@ namespace trace::formatter{
                 return false;
             }
             return isatty(outputFd);
-
         }
 
-        static std::string_view code_for(const StyleRole role)
-        {
+        static std::string_view code_for(const StyleRole role) {
             using enum StyleRole;
             using namespace std::string_view_literals;
 
-            switch (role) {
+            switch (role)
+            {
             case Timestamp:
             case SyscallNr:
             case ArgName:
@@ -107,8 +112,10 @@ namespace trace::formatter{
                 return ansi::bright_cyan;
 
             case ArgValStr:
+                return ansi::light_green;
+
             case RetSuccess:
-                return ansi::green;
+                return ansi::bold_green;
 
             case ArgValConstant:
                 return ansi::yellow;
@@ -117,15 +124,24 @@ namespace trace::formatter{
                 return ansi::blue;
 
             case Pid:
-                return ansi::magenta;
+                return ansi::dim;
 
             case RetError:
             case RetErrorName:
             case RetErrorStr:
+            case Signaled:
                 return ansi::bold_red;
 
             case Event:
+            case Stopped:
                 return ansi::bold_magenta;
+
+            case ExitOk:
+                return ansi::bold_green;
+
+            case ExitWarn:
+                return ansi::bold_yellow;
+
             }
 
             return ""sv;

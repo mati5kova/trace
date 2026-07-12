@@ -25,11 +25,7 @@ int main(const int argc, char* argv[]) {
         }
 
         trace::Tracer tracer(parseResult);
-        if (tracer.run() != 0)
-        {
-            std::cerr << "tracer.run() error" << std::endl;
-            return 1;
-        }
+        return tracer.run();
     }
     catch (const std::exception& e)
     {
