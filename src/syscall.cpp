@@ -523,10 +523,10 @@ void trace::syscall::handle_syscall_info_print(const options::ParseResult &parse
                 const auto us = us_total.count() % 1000;
 
                 oss
-                    << "."
-                    << std::setfill('0') << std::setw(3) << ms
-                    << "'"
-                    << std::setfill('0') << std::setw(3) << us;
+                        << "."
+                        << std::setfill('0') << std::setw(3) << ms
+                        << "'"
+                        << std::setfill('0') << std::setw(3) << us;
             }
 
             sc_line += cf.apply(Timestamp, oss.str()) + " ";

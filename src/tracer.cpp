@@ -122,9 +122,11 @@ int trace::Tracer::run() {
 
             formatter::Formatter cf(parseResult_.colorMode);
 
-            std::string exitedStr = "[pid " + std::to_string(pidOfChanged) + "] +++ exited with " + std::to_string(exitStatus) + " +++\n";
+            std::string exitedStr = "[pid " + std::to_string(pidOfChanged) + "] +++ exited with " +
+                                    std::to_string(exitStatus) + " +++\n";
 
-            std::cout << cf.apply(exitStatus == 0 ? formatter::StyleRole::ExitOk : formatter::StyleRole::ExitWarn, exitedStr);
+            std::cout << cf.apply(exitStatus == 0 ? formatter::StyleRole::ExitOk : formatter::StyleRole::ExitWarn,
+                                  exitedStr);
 
             continue;
         }
@@ -148,7 +150,8 @@ int trace::Tracer::run() {
             const char *signalDescription = strsignal(signalNumber);
 
             formatter::Formatter cf(parseResult_.colorMode);
-            std::string signaledStr = "[pid " + std::to_string(pidOfChanged) + "] +++ killed by " + signal_abbreviation(signalNumber).data() + " (" + signalDescription + ")";
+            std::string signaledStr = "[pid " + std::to_string(pidOfChanged) + "] +++ killed by " +
+                                      signal_abbreviation(signalNumber).data() + " (" + signalDescription + ")";
 
 #ifdef WCOREDUMP
             if (WCOREDUMP(wstatus))
@@ -380,11 +383,14 @@ int trace::Tracer::run() {
             {
                 formatter::Formatter cf(parseResult_.colorMode);
 
-                std::string stoppedStr = "[pid " + std::to_string(pidOfChanged) + "] --- " + signal_abbreviation(signal).data() + " {si_signo=" + signal_abbreviation(signalInfo.si_signo).data() + ", si_code=" + std::to_string(signalInfo.si_code);
+                std::string stoppedStr = "[pid " + std::to_string(pidOfChanged) + "] --- " + signal_abbreviation(signal)
+                                         .data() + " {si_signo=" + signal_abbreviation(signalInfo.si_signo).data() +
+                                         ", si_code=" + std::to_string(signalInfo.si_code);
 
                 if (signalInfo.si_pid != 0)
                 {
-                    stoppedStr += ", si_pid=" + std::to_string(signalInfo.si_pid) + ", si_uid=" + std::to_string(signalInfo.si_uid);
+                    stoppedStr += ", si_pid=" + std::to_string(signalInfo.si_pid) + ", si_uid=" + std::to_string(
+                        signalInfo.si_uid);
                 }
 
                 stoppedStr += "} ---\n";

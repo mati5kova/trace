@@ -19,7 +19,7 @@ namespace trace::formatter::ansi{
     constexpr auto bold_green = "\033[1;32m"sv;
     constexpr auto light_green = "\033[38;5;114m"sv;
     constexpr auto yellow = "\033[33m"sv;
-    constexpr auto bold_yellow  = "\033[1;33m"sv;
+    constexpr auto bold_yellow = "\033[1;33m"sv;
     constexpr auto blue = "\033[34m"sv;
     constexpr auto magenta = "\033[35m"sv;
     constexpr auto bright_cyan = "\033[96m"sv;
@@ -141,7 +141,6 @@ namespace trace::formatter{
 
             case ExitWarn:
                 return ansi::bold_yellow;
-
             }
 
             return ""sv;
